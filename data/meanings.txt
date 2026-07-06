@@ -1,0 +1,16 @@
+security|Protection from danger, damage, or unauthorized access.
+computer|An electronic device that stores and processes information.
+network|A group of connected computers or devices that can share information.
+password|A secret word or phrase used to access an account or system.
+firewall|A security tool that helps block unsafe network traffic.
+malware|Harmful software made to damage, steal, or take control of a computer.
+phishing|A fake message or website that tries to trick you into giving away private information.
+software|Programs and apps that tell a computer what to do.
+hardware|The physical parts of a computer, like the keyboard, monitor, and hard drive.
+internet|A worldwide network that connects computers and websites.
+router|A device that sends network traffic between devices and the internet.
+encryption|A way to scramble information so only authorized people can read it.
+authentication|The process of proving who you are, usually with a password or code.
+username|The name used to identify a person on a computer or website.
+update|A change that fixes, improves, or protects software.
+backup|A saved copy of important files in case the original files are lost.

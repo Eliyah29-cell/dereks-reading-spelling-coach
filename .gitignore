@@ -1,0 +1,18 @@
+# Python virtual environment
+.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# PyCharm project settings
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Personal practice data
+data/missed_words.txt
+data/score_history.txt
+ModuleSixAssignment.py
