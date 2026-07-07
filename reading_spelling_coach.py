@@ -429,6 +429,71 @@ def approve_pending_words():
     backup_project_to_8tb()
 
 
+
+def random_word_practice(words):
+    print("\nRandom Word Practice")
+    print("====================")
+
+    if not words:
+        print("No words found. Please add words first.")
+        return
+
+    try:
+        with open(MEANINGS_FILE, "r") as file:
+            meanings = [line.strip() for line in file if line.strip()]
+    except FileNotFoundError:
+        meanings = []
+
+    if len(meanings) != len(words):
+        meanings = ["No meaning found yet."] * len(words)
+
+    max_words = len(words)
+
+    amount_text = input(f"How many random words do you want to practice? 1 to {max_words}, or type q/menu to go back: ").strip().lower()
+
+    if amount_text in ["q", "quit", "menu"]:
+        print("Returning to main menu.")
+        return
+
+    try:
+        amount = int(amount_text)
+    except ValueError:
+        print("Please enter a number.")
+        return
+
+    if amount < 1:
+        print("Please choose at least 1 word.")
+        return
+
+    if amount > max_words:
+        amount = max_words
+
+    word_pairs = list(zip(words, meanings))
+    selected_words = random.sample(word_pairs, amount)
+
+    score = 0
+
+    for number, (word, meaning) in enumerate(selected_words, start=1):
+        print(f"\nWord {number} of {amount}")
+        print(f"Meaning: {meaning}")
+
+        answer = input("Spell the word, or type q/menu to go back: ").strip().lower()
+
+        if answer in ["q", "quit", "menu"]:
+            print("Returning to main menu.")
+            return
+
+        if answer == word.lower():
+            print("Correct!")
+            score += 1
+        else:
+            print(f"Not quite. The correct spelling is: {word}")
+            save_missed_word(word)
+
+    print(f"\nRandom practice complete. Score: {score} out of {amount}")
+    save_score(score, amount)
+
+
 def show_menu():
     print("\n==============================")
     print(" Derek's Reading & Spelling Coach")
@@ -447,6 +512,7 @@ def show_menu():
     print("12. Get new words from the internet")
     print("13. Show pending words")
     print("14. Approve pending words")
+    print("15. Random word practice")
 
 
 def practice_words(words):
@@ -613,7 +679,7 @@ def main():
 
     while True:
         show_menu()
-        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, or 14: ").strip()
+        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, or 15: ").strip()
 
         if choice == "1":
             practice_words(words)
@@ -645,8 +711,10 @@ def main():
             show_pending_words()
         elif choice == "14":
             approve_pending_words()
+        elif choice == "15":
+            random_word_practice(words)
         else:
-            print("\nPlease choose a valid option: 1 through 14.")
+            print("\nPlease choose a valid option: 1 through 15.")
 
 
 main()
