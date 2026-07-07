@@ -48,3 +48,10 @@ project
 question
 research
 summary
+calculator
+figurer
+reckoner
+estimator
+informatics
+supercomputer
+mainframe

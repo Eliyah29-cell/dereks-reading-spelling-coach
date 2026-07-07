@@ -1,5 +1,9 @@
 import random
 from datetime import datetime
+import urllib.error
+import urllib.request
+import urllib.parse
+import json
 CONFIG_FILE = "config.txt"
 
 
@@ -23,6 +27,7 @@ APP_FOLDER = load_app_folder()
 WORDS_FILE = APP_FOLDER + "/words.txt"
 MISSED_WORDS_FILE = APP_FOLDER + "/missed_words.txt"
 MEANINGS_FILE = APP_FOLDER + "/meanings.txt"
+PENDING_WORDS_FILE = APP_FOLDER + "/pending_words.txt"
 SCORE_HISTORY_FILE = APP_FOLDER + "/score_history.txt"
 
 LEVELS = {
@@ -146,6 +151,209 @@ def show_score_history():
         print("No score history file found yet.")
 
 
+
+def clean_internet_word(word):
+    word = word.strip().lower()
+
+    if not word:
+        return ""
+
+    allowed_characters = "abcdefghijklmnopqrstuvwxyz-"
+    for letter in word:
+        if letter not in allowed_characters:
+            return ""
+
+    if len(word) < 2 or len(word) > 25:
+        return ""
+
+    return word
+
+
+def clean_definition(raw_definition):
+    raw_definition = raw_definition.strip()
+
+    if "\t" in raw_definition:
+        raw_definition = raw_definition.split("\t", 1)[1]
+
+    raw_definition = raw_definition.replace("\n", " ").strip()
+
+    if not raw_definition:
+        return "No meaning found yet."
+
+    return raw_definition
+
+
+def load_word_set(file_name):
+    try:
+        with open(file_name, "r") as file:
+            return {line.strip().split("|")[0].strip().lower() for line in file if line.strip()}
+    except FileNotFoundError:
+        return set()
+
+
+def get_words_from_internet():
+    print("\nGet New Words From the Internet")
+    print("===============================")
+    print("Safety rule: This only downloads text words and meanings.")
+    print("It does not download or run code.\n")
+
+    topic = input("Enter a topic or category, like school, computer, ocean, or family: ").strip()
+
+    if not topic:
+        print("\nNo topic entered. Returning to the main menu.")
+        return
+
+    safe_topic = urllib.parse.quote(topic)
+    url = f"https://api.datamuse.com/words?ml={safe_topic}&md=d&max=10"
+
+    try:
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError:
+        print("\nInternet error. Check your connection and try again.")
+        return
+    except TimeoutError:
+        print("\nThe internet request took too long. Try again later.")
+        return
+    except Exception as error:
+        print(f"\nSomething went wrong: {error}")
+        return
+
+    current_words = load_word_set(WORDS_FILE)
+    pending_words = load_word_set(PENDING_WORDS_FILE)
+    new_pending_words = []
+
+    for item in data:
+        word = clean_internet_word(item.get("word", ""))
+
+        if not word:
+            continue
+
+        if word in current_words or word in pending_words:
+            continue
+
+        definitions = item.get("defs", [])
+        if definitions:
+            meaning = clean_definition(definitions[0])
+        else:
+            meaning = "No meaning found yet."
+
+        new_pending_words.append((word, meaning))
+
+    if not new_pending_words:
+        print("\nNo new words found for that topic.")
+        return
+
+    with open(PENDING_WORDS_FILE, "a") as file:
+        for word, meaning in new_pending_words:
+            file.write(f"{word}|{meaning}\n")
+
+    print(f"\nSaved {len(new_pending_words)} new word suggestion(s) to pending_words.txt.")
+    print("They were NOT added to your main word list yet.")
+    print("Use option 13 later to review pending words.")
+
+
+def show_pending_words():
+    print("\nPending Words")
+    print("=============")
+
+    try:
+        with open(PENDING_WORDS_FILE, "r") as file:
+            pending = [line.strip() for line in file if line.strip()]
+    except FileNotFoundError:
+        print("No pending_words.txt file found yet.")
+        return
+
+    if not pending:
+        print("No pending words yet.")
+        return
+
+    for number, line in enumerate(pending, start=1):
+        if "|" in line:
+            word, meaning = line.split("|", 1)
+        else:
+            word = line
+            meaning = "No meaning found yet."
+
+        print(f"{number}. {word}")
+        print(f"   Meaning: {meaning}")
+
+
+def approve_pending_words():
+    print("\nApprove Pending Words")
+    print("=====================")
+
+    try:
+        with open(PENDING_WORDS_FILE, "r") as file:
+            pending = [line.strip() for line in file if line.strip()]
+    except FileNotFoundError:
+        print("No pending_words.txt file found yet.")
+        return
+
+    if not pending:
+        print("No pending words to approve.")
+        return
+
+    print("These words are waiting for approval:\n")
+
+    for number, line in enumerate(pending, start=1):
+        if "|" in line:
+            word, meaning = line.split("|", 1)
+        else:
+            word = line
+            meaning = "No meaning found yet."
+
+        print(f"{number}. {word} - {meaning}")
+
+    answer = input("\nApprove ALL pending words? Type yes or no: ").strip().lower()
+
+    if answer != "yes":
+        print("\nNothing was approved.")
+        return
+
+    current_words = load_word_set(WORDS_FILE)
+    approved_words = []
+    approved_meanings = []
+
+    for line in pending:
+        if "|" in line:
+            word, meaning = line.split("|", 1)
+        else:
+            word = line
+            meaning = "No meaning found yet."
+
+        word = clean_internet_word(word)
+
+        if not word:
+            continue
+
+        if word in current_words:
+            continue
+
+        approved_words.append(word)
+        approved_meanings.append(meaning.strip())
+        current_words.add(word)
+
+    if not approved_words:
+        print("\nNo new words were approved.")
+        return
+
+    with open(WORDS_FILE, "a") as words_file:
+        for word in approved_words:
+            words_file.write(f"{word}\n")
+
+    with open(MEANINGS_FILE, "a") as meanings_file:
+        for meaning in approved_meanings:
+            meanings_file.write(f"{meaning}\n")
+
+    with open(PENDING_WORDS_FILE, "w") as pending_file:
+        pending_file.write("")
+
+    print(f"\nApproved {len(approved_words)} word(s).")
+    print("The approved words were added to words.txt and meanings.txt.")
+    print("pending_words.txt is now clear.")
+
+
 def show_menu():
     print("\n==============================")
     print(" Derek's Reading & Spelling Coach")
@@ -161,6 +369,9 @@ def show_menu():
     print("9. Practice by level")
     print("10. Show score history")
     print("11. Quit")
+    print("12. Get new words from the internet")
+    print("13. Show pending words")
+    print("14. Approve pending words")
 
 
 def practice_words(words):
@@ -327,7 +538,7 @@ def main():
 
     while True:
         show_menu()
-        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, or 11: ").strip()
+        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, or 14: ").strip()
 
         if choice == "1":
             practice_words(words)
@@ -353,8 +564,14 @@ def main():
         elif choice == "11":
             print("\nGoodbye. Keep practicing.")
             break
+        elif choice == "12":
+            get_words_from_internet()
+        elif choice == "13":
+            show_pending_words()
+        elif choice == "14":
+            approve_pending_words()
         else:
-            print("\nPlease choose a valid option: 1 through 11.")
+            print("\nPlease choose a valid option: 1 through 14.")
 
 
 main()

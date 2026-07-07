@@ -48,3 +48,10 @@ project|A larger task that takes planning and work.
 question|A sentence that asks for information.
 research|Looking for information to learn about a topic.
 summary|A short explanation of the main ideas.
+A mechanical or electronic device that performs mathematical calculations; sometimes, an electronic one specifically.
+One who figures or calculates.
+One who reckons.
+A person who estimates, especially one who estimates costs
+(computing) A branch of information science and of computer science that focuses on the study of information processing, particularly with respect to systems integration and human interactions with machine and data.
+(computing) Any computer that has a far greater processing power than others of its generation.
+(computer hardware) A large, powerful computer able to manage very many simultaneous tasks and communicate with very many connected terminals; used by large, complex organizations (such as banks and supermarkets) where continuously sustained operation is vital.
