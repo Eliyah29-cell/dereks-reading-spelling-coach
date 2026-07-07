@@ -4,6 +4,8 @@ import urllib.error
 import urllib.request
 import urllib.parse
 import json
+import subprocess
+import os
 CONFIG_FILE = "config.txt"
 
 
@@ -152,6 +154,69 @@ def show_score_history():
 
 
 
+
+def backup_project_to_8tb():
+    print("\nStarting automatic 8TB backup...")
+
+    try:
+        project_folder = os.path.dirname(os.path.abspath(__file__))
+        backup_script = os.path.join(project_folder, "backup_to_8tb.sh")
+
+        subprocess.run(["bash", backup_script], cwd=project_folder, check=True)
+
+        print("Automatic 8TB backup complete.")
+    except FileNotFoundError:
+        print("Backup script was not found. Please run ./backup_to_8tb.sh manually.")
+    except subprocess.CalledProcessError:
+        print("Automatic backup had a problem. Please run ./backup_to_8tb.sh manually.")
+
+
+
+def prepare_internet_search_topic(topic):
+    topic = topic.strip()
+    topic_lower = topic.lower()
+
+    topic_map = {
+        "network": "computer networking",
+        "networks": "computer networking",
+        "networking": "computer networking",
+        "computer network": "computer networking",
+        "computer networks": "computer networking",
+        "security": "cybersecurity",
+        "cyber": "cybersecurity",
+        "cyber security": "cybersecurity",
+        "computer": "computer science",
+    }
+
+    return topic_map.get(topic_lower, topic)
+
+
+def word_matches_search_topic(word, meaning, search_topic):
+    text = f"{word} {meaning}".lower()
+    search_topic = search_topic.lower()
+
+    if search_topic == "computer networking":
+        networking_keywords = [
+            "computer", "network", "internet", "router", "switch",
+            "server", "firewall", "packet", "protocol", "dns",
+            "ip", "subnet", "ethernet", "wireless", "wifi",
+            "wi-fi", "lan", "wan", "data", "communication"
+        ]
+
+        return any(keyword in text for keyword in networking_keywords)
+
+    if search_topic == "cybersecurity":
+        security_keywords = [
+            "security", "cyber", "password", "malware", "virus",
+            "firewall", "encryption", "attack", "threat",
+            "network", "computer", "data", "authentication"
+        ]
+
+        return any(keyword in text for keyword in security_keywords)
+
+    return True
+
+
 def clean_internet_word(word):
     word = word.strip().lower()
 
@@ -197,13 +262,18 @@ def get_words_from_internet():
     print("Safety rule: This only downloads text words and meanings.")
     print("It does not download or run code.\n")
 
-    topic = input("Enter a topic or category, like school, computer, ocean, or family: ").strip()
+    topic = input("Enter a topic or category, like computer networking, cybersecurity, school, or family: ").strip()
 
     if not topic:
         print("\nNo topic entered. Returning to the main menu.")
         return
 
-    safe_topic = urllib.parse.quote(topic)
+    search_topic = prepare_internet_search_topic(topic)
+
+    if search_topic.lower() != topic.lower():
+        print(f"Using safer search topic: {search_topic}")
+
+    safe_topic = urllib.parse.quote(search_topic)
     url = f"https://api.datamuse.com/words?ml={safe_topic}&md=d&max=10"
 
     try:
@@ -237,6 +307,9 @@ def get_words_from_internet():
             meaning = clean_definition(definitions[0])
         else:
             meaning = "No meaning found yet."
+
+        if not word_matches_search_topic(word, meaning, search_topic):
+            continue
 
         new_pending_words.append((word, meaning))
 
@@ -352,6 +425,8 @@ def approve_pending_words():
     print(f"\nApproved {len(approved_words)} word(s).")
     print("The approved words were added to words.txt and meanings.txt.")
     print("pending_words.txt is now clear.")
+
+    backup_project_to_8tb()
 
 
 def show_menu():
