@@ -516,6 +516,7 @@ def show_menu():
     print("13. Show pending words")
     print("14. Approve pending words")
     print("15. Random word practice")
+    print("16. Random practice by level")
 
 
 def practice_words(words):
@@ -691,12 +692,97 @@ def practice_by_level():
         print("\nPlease choose a valid level.")
 
 
+def random_practice_by_level():
+    print("\nRandom Practice by Level")
+    print("========================")
+    print("1. Easy")
+    print("2. Medium")
+    print("3. Hard")
+    print("4. Cybersecurity")
+    print("5. Go back")
+
+    level_choice = input("\nChoose 1, 2, 3, 4, 5, or type q/menu to go back: ").strip().lower()
+
+    if is_exit_choice(level_choice):
+        print("\nReturning to main menu.")
+        return
+    elif level_choice == "1":
+        selected_level = "easy"
+    elif level_choice == "2":
+        selected_level = "medium"
+    elif level_choice == "3":
+        selected_level = "hard"
+    elif level_choice == "4":
+        selected_level = "cybersecurity"
+    elif level_choice == "5":
+        print("\nReturning to main menu.")
+        return
+    else:
+        print("\nPlease choose a valid level.")
+        return
+
+    words = LEVELS[selected_level]
+
+    if not words:
+        print("\nNo words found for this level.")
+        return
+
+    meanings = load_meanings()
+    max_words = len(words)
+
+    amount_text = input(f"How many random words do you want to practice? 1 to {max_words}, or type q/menu to go back: ").strip().lower()
+
+    if is_exit_choice(amount_text):
+        print("Returning to main menu.")
+        return
+
+    try:
+        amount = int(amount_text)
+    except ValueError:
+        print("Please enter a number.")
+        return
+
+    if amount < 1:
+        print("Please choose at least 1 word.")
+        return
+
+    if amount > max_words:
+        amount = max_words
+
+    selected_words = random.sample(words, amount)
+
+    score = 0
+
+    for number, word in enumerate(selected_words, start=1):
+        meaning = meanings.get(word, "No meaning saved yet.")
+
+        print(f"\nWord {number} of {amount}")
+        print(f"Level: {selected_level}")
+        print(f"Meaning: {meaning}")
+
+        answer = input("Spell the word, or type q/menu to go back: ").strip().lower()
+
+        if is_exit_choice(answer):
+            print("Returning to main menu.")
+            return
+
+        if answer == word.lower():
+            print("Correct!")
+            score += 1
+        else:
+            print(f"Not quite. The correct spelling is: {word}")
+            save_missed_word(word)
+
+    print(f"\nRandom level practice complete. Score: {score} out of {amount}")
+    save_score(score, amount)
+
+
 def main():
     words = load_words()
 
     while True:
         show_menu()
-        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, or 15: ").strip()
+        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, or 16: ").strip()
 
         if choice == "1":
             practice_words(words)
@@ -730,8 +816,10 @@ def main():
             approve_pending_words()
         elif choice == "15":
             random_word_practice(words)
+        elif choice == "16":
+            random_practice_by_level()
         else:
-            print("\nPlease choose a valid option: 1 through 15.")
+            print("\nPlease choose a valid option: 1 through 16.")
 
 
 main()
