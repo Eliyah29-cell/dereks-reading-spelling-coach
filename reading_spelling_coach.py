@@ -31,6 +31,9 @@ MISSED_WORDS_FILE = APP_FOLDER + "/missed_words.txt"
 MEANINGS_FILE = APP_FOLDER + "/meanings.txt"
 PENDING_WORDS_FILE = APP_FOLDER + "/pending_words.txt"
 SCORE_HISTORY_FILE = APP_FOLDER + "/score_history.txt"
+def is_exit_choice(user_text):
+    return user_text.strip().lower() in ["q", "quit", "menu"]
+
 
 LEVELS = {
     "easy": ["computer", "internet", "software", "hardware", "backup"],
@@ -533,14 +536,17 @@ def practice_words(words):
         else:
             print("Meaning: No meaning saved yet.")
 
-        answer = input("Type the word: ").strip().lower()
+        answer = input("Type the word, or type q/menu to go back: ").strip().lower()
+
+        if is_exit_choice(answer):
+            print("Returning to main menu.")
+            return
 
         if answer == word:
             print("Correct!\n")
         else:
             print(f"Not quite. The correct spelling is: {word}\n")
             save_missed_word(word)
-
 
 def spelling_test(words):
     if not words:
@@ -549,7 +555,8 @@ def spelling_test(words):
 
     print("\nSpelling Test")
     print("I will show you the word.")
-    print("Then you will type it from memory.\n")
+    print("Then you will type it from memory.")
+    print("You can type q, menu, or quit to return to the main menu.\n")
 
     test_words = words.copy()
     random.shuffle(test_words)
@@ -559,11 +566,20 @@ def spelling_test(words):
 
     for word in test_words:
         print(f"Study this word: {word}")
-        input("Press Enter when you are ready to spell it...")
+
+        ready_answer = input("Press Enter when you are ready, or type q/menu to go back: ").strip().lower()
+
+        if is_exit_choice(ready_answer):
+            print("Returning to main menu.")
+            return
 
         print("\n" * 20)
 
-        answer = input("Spell the word: ").strip().lower()
+        answer = input("Spell the word, or type q/menu to go back: ").strip().lower()
+
+        if is_exit_choice(answer):
+            print("Returning to main menu.")
+            return
 
         if answer == word:
             print("Correct!\n")
@@ -573,9 +589,9 @@ def spelling_test(words):
             missed_words.append(word)
             save_missed_word(word)
 
-    print("==============================")
+    print("==========================")
     print(" Test Results")
-    print("==============================")
+    print("==========================")
     print(f"Score: {score} out of {len(test_words)}")
 
     save_score(score, len(test_words))
@@ -586,7 +602,6 @@ def spelling_test(words):
             print(f"- {word}")
     else:
         print("\nGreat job! You spelled every word correctly.")
-
 
 def add_word(words):
     new_word = input("\nEnter a new word to add: ").strip().lower()
@@ -658,9 +673,11 @@ def practice_by_level():
     print("4. Cybersecurity")
     print("5. Go back")
 
-    level_choice = input("\nChoose 1, 2, 3, 4, or 5: ").strip()
+    level_choice = input("\nChoose 1, 2, 3, 4, 5, or type q/menu to go back: ").strip().lower()
 
-    if level_choice == "1":
+    if is_exit_choice(level_choice):
+        print("\nReturning to main menu.")
+    elif level_choice == "1":
         practice_words(LEVELS["easy"])
     elif level_choice == "2":
         practice_words(LEVELS["medium"])
