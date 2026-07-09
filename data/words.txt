@@ -57,3 +57,5 @@ supercomputer
 mainframe
 internetworking
 internetwork
+compute
+system

@@ -57,3 +57,5 @@ A person who estimates, especially one who estimates costs
 (computer hardware) A large, powerful computer able to manage very many simultaneous tasks and communicate with very many connected terminals; used by large, complex organizations (such as banks and supermarkets) where continuously sustained operation is vital.
 the practice of interconnecting multiple computer networks, such that any pair of hosts in the connected networks can exchange messages irrespective of their hardware-level networking technology.
 A network of networks.
+To reckon, calculate.
+A group or set of related things that operate together as a complex whole.

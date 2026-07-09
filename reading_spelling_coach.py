@@ -194,6 +194,121 @@ def prepare_internet_search_topic(topic):
     return topic_map.get(topic_lower, topic)
 
 
+def choose_internet_topic():
+    print("\nChoose a topic")
+    print("================")
+    print("1. Computer")
+    print("2. Internet")
+    print("3. Network")
+    print("4. Cybersecurity")
+    print("5. School")
+    print("6. Reading")
+    print("7. Custom topic")
+    print("8. Go back")
+
+    choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, or type q/menu to go back: ").strip().lower()
+
+    if is_exit_choice(choice) or choice == "8":
+        print("\nReturning to main menu.")
+        return ""
+
+    topic_choices = {
+        "1": "computer",
+        "2": "internet",
+        "3": "network",
+        "4": "cybersecurity",
+        "5": "school",
+        "6": "reading",
+    }
+
+    if choice == "7":
+        custom_topic = input("Enter your custom topic, or type q/menu to go back: ").strip()
+
+        if is_exit_choice(custom_topic):
+            print("\nReturning to main menu.")
+            return ""
+
+        return custom_topic
+
+    if choice in topic_choices:
+        return topic_choices[choice]
+
+    print("\nPlease choose a valid topic.")
+    return ""
+
+
+def choose_word_difficulty():
+    print("\nChoose difficulty")
+    print("=================")
+    print("1. Beginner / Easy")
+    print("2. Medium")
+    print("3. Hard")
+    print("4. Mixed")
+    print("5. Go back")
+
+    choice = input("\nChoose 1, 2, 3, 4, 5, or type q/menu to go back: ").strip().lower()
+
+    if is_exit_choice(choice) or choice == "5":
+        print("\nReturning to main menu.")
+        return ""
+
+    difficulty_choices = {
+        "1": "beginner",
+        "2": "medium",
+        "3": "hard",
+        "4": "mixed",
+    }
+
+    if choice in difficulty_choices:
+        return difficulty_choices[choice]
+
+    print("\nPlease choose a valid difficulty.")
+    return ""
+
+
+def word_matches_difficulty(word, meaning, difficulty):
+    word = word.strip().lower()
+    meaning = meaning.strip()
+
+    if not word:
+        return False
+
+    if meaning == "No meaning found yet.":
+        return False
+
+    meaning_lower = meaning.lower()
+    blocked_meaning_phrases = [
+        "surname",
+        "given name",
+        "family name",
+        "first name",
+        "last name",
+        "proper name",
+        "abbreviation",
+        "acronym",
+        "initialism",
+    ]
+
+    for phrase in blocked_meaning_phrases:
+        if phrase in meaning_lower:
+            return False
+
+    if difficulty == "beginner":
+        return 2 <= len(word) <= 8 and len(meaning) <= 120
+
+    if difficulty == "medium":
+        return 4 <= len(word) <= 12 and len(meaning) <= 160
+
+    if difficulty == "hard":
+        return 6 <= len(word) <= 25
+
+    if difficulty == "mixed":
+        return 2 <= len(word) <= 25
+
+    return False
+
+
+
 def word_matches_search_topic(word, meaning, search_topic):
     text = f"{word} {meaning}".lower()
     search_topic = search_topic.lower()
@@ -245,6 +360,14 @@ def clean_definition(raw_definition):
 
     raw_definition = raw_definition.replace("\n", " ").strip()
 
+    while raw_definition.startswith("(") and ")" in raw_definition:
+        label, rest = raw_definition.split(")", 1)
+
+        if len(label) > 30:
+            break
+
+        raw_definition = rest.strip()
+
     if not raw_definition:
         return "No meaning found yet."
 
@@ -265,11 +388,17 @@ def get_words_from_internet():
     print("Safety rule: This only downloads text words and meanings.")
     print("It does not download or run code.\n")
 
-    topic = input("Enter a topic or category, like computer networking, cybersecurity, school, or family: ").strip()
+    topic = choose_internet_topic()
 
     if not topic:
-        print("\nNo topic entered. Returning to the main menu.")
         return
+
+    difficulty = choose_word_difficulty()
+
+    if not difficulty:
+        return
+
+    print(f"Using word difficulty: {difficulty}")
 
     search_topic = prepare_internet_search_topic(topic)
 
@@ -277,7 +406,7 @@ def get_words_from_internet():
         print(f"Using safer search topic: {search_topic}")
 
     safe_topic = urllib.parse.quote(search_topic)
-    url = f"https://api.datamuse.com/words?ml={safe_topic}&md=d&max=10"
+    url = f"https://api.datamuse.com/words?ml={safe_topic}&md=d&max=30"
 
     try:
         with urllib.request.urlopen(url, timeout=10) as response:
@@ -312,6 +441,9 @@ def get_words_from_internet():
             meaning = "No meaning found yet."
 
         if not word_matches_search_topic(word, meaning, search_topic):
+            continue
+
+        if not word_matches_difficulty(word, meaning, difficulty):
             continue
 
         new_pending_words.append((word, meaning))
