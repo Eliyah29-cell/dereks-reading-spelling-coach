@@ -166,11 +166,36 @@ def show_progress_report():
         except FileNotFoundError:
             return []
 
+    def parse_score_line(score_line):
+        try:
+            score_part = score_line.split("Score:", 1)[1].strip()
+            score_text, total_text = score_part.split(" out of ", 1)
+
+            score = int(score_text.strip())
+            total = int(total_text.strip().split()[0])
+
+            if total <= 0:
+                return None
+
+            percent = (score / total) * 100
+            return score, total, percent
+
+        except (IndexError, ValueError):
+            return None
+
     word_lines = read_non_empty_lines(WORDS_FILE)
     meaning_lines = read_non_empty_lines(MEANINGS_FILE)
     pending_words = read_non_empty_lines(PENDING_WORDS_FILE)
     missed_words = load_missed_words()
     scores = read_non_empty_lines(SCORE_HISTORY_FILE)
+
+    parsed_scores = []
+
+    for score_line in scores:
+        parsed_score = parse_score_line(score_line)
+
+        if parsed_score:
+            parsed_scores.append(parsed_score)
 
     print("\nProgress Report")
     print("================")
@@ -191,6 +216,26 @@ def show_progress_report():
         print(f"Last score: {scores[-1]}")
     else:
         print("Last score: No scores saved yet.")
+
+    if parsed_scores:
+        latest_score, latest_total, latest_percent = parsed_scores[-1]
+        best_percent = max(score_percent for score, total, score_percent in parsed_scores)
+        average_percent = sum(score_percent for score, total, score_percent in parsed_scores) / len(parsed_scores)
+
+        print(f"Latest score percent: {latest_percent:.1f}%")
+        print(f"Best score percent: {best_percent:.1f}%")
+        print(f"Average score percent: {average_percent:.1f}%")
+    else:
+        print("Latest score percent: No score data yet.")
+        print("Best score percent: No score data yet.")
+        print("Average score percent: No score data yet.")
+
+    if word_lines:
+        mastered_words = len(word_lines) - len(missed_words)
+        progress_percent = (mastered_words / len(word_lines)) * 100
+        print(f"Word progress: {progress_percent:.1f}%")
+    else:
+        print("Word progress: No words saved yet.")
 
     if missed_words:
         print("\nWords to keep practicing:")
