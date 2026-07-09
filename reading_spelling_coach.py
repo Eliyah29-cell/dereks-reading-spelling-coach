@@ -158,6 +158,35 @@ def show_score_history():
 
 
 
+def pronounce_word(word):
+    word = word.strip()
+
+    if not word:
+        print("No word to pronounce.")
+        return
+
+    try:
+        subprocess.run(["spd-say", "-r", "-35", "-p", "5", word], check=False)
+    except FileNotFoundError:
+        print("Pronunciation tool was not found.")
+        print("Please make sure spd-say is installed.")
+
+
+def pronounce_custom_word():
+    print("\nPronounce a Word")
+    print("================")
+
+    word = input("Enter a word to pronounce, or type q/menu to go back: ").strip()
+
+    if is_exit_choice(word):
+        print("\nReturning to main menu.")
+        return
+
+    print(f"Speaking: {word}")
+    pronounce_word(word)
+
+
+
 def show_progress_report():
     def read_non_empty_lines(file_name):
         try:
@@ -737,6 +766,7 @@ def show_menu():
     print("15. Random word practice")
     print("16. Random practice by level")
     print("17. Show progress report")
+    print("18. Pronounce a word")
 
 
 def practice_words(words):
@@ -1002,7 +1032,7 @@ def main():
 
     while True:
         show_menu()
-        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, or 17: ").strip()
+        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, or 18: ").strip()
 
         if choice == "1":
             practice_words(words)
@@ -1040,8 +1070,10 @@ def main():
             random_practice_by_level()
         elif choice == "17":
             show_progress_report()
+        elif choice == "18":
+            pronounce_custom_word()
         else:
-            print("\nPlease choose a valid option: 1 through 17.")
+            print("\nPlease choose a valid option: 1 through 18.")
 
 
 main()
