@@ -158,6 +158,48 @@ def show_score_history():
 
 
 
+def show_progress_report():
+    def read_non_empty_lines(file_name):
+        try:
+            with open(file_name, "r") as file:
+                return [line.strip() for line in file if line.strip()]
+        except FileNotFoundError:
+            return []
+
+    word_lines = read_non_empty_lines(WORDS_FILE)
+    meaning_lines = read_non_empty_lines(MEANINGS_FILE)
+    pending_words = read_non_empty_lines(PENDING_WORDS_FILE)
+    missed_words = load_missed_words()
+    scores = read_non_empty_lines(SCORE_HISTORY_FILE)
+
+    print("\nProgress Report")
+    print("================")
+
+    print(f"Total words: {len(word_lines)}")
+    print(f"Total meanings: {len(meaning_lines)}")
+
+    if len(word_lines) == len(meaning_lines):
+        print("Word list check: words and meanings match")
+    else:
+        print("Word list check: words and meanings do NOT match")
+
+    print(f"Pending internet words: {len(pending_words)}")
+    print(f"Missed words to practice: {len(missed_words)}")
+    print(f"Saved score records: {len(scores)}")
+
+    if scores:
+        print(f"Last score: {scores[-1]}")
+    else:
+        print("Last score: No scores saved yet.")
+
+    if missed_words:
+        print("\nWords to keep practicing:")
+        for word in missed_words:
+            print(f"- {word}")
+    else:
+        print("\nGreat job. No missed words saved right now.")
+
+
 def backup_project_to_8tb():
     print("\nStarting automatic 8TB backup...")
 
@@ -649,6 +691,7 @@ def show_menu():
     print("14. Approve pending words")
     print("15. Random word practice")
     print("16. Random practice by level")
+    print("17. Show progress report")
 
 
 def practice_words(words):
@@ -914,7 +957,7 @@ def main():
 
     while True:
         show_menu()
-        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, or 16: ").strip()
+        choice = input("\nChoose 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, or 17: ").strip()
 
         if choice == "1":
             practice_words(words)
@@ -950,8 +993,10 @@ def main():
             random_word_practice(words)
         elif choice == "16":
             random_practice_by_level()
+        elif choice == "17":
+            show_progress_report()
         else:
-            print("\nPlease choose a valid option: 1 through 16.")
+            print("\nPlease choose a valid option: 1 through 17.")
 
 
 main()
