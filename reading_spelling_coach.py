@@ -539,42 +539,113 @@ def get_words_from_internet():
 
     current_words = load_word_set(WORDS_FILE)
     pending_words = load_word_set(PENDING_WORDS_FILE)
-    new_pending_words = []
+
+    suggestions = []
+    rejected_words = []
 
     for item in data:
-        word = clean_internet_word(item.get("word", ""))
+        original_word = item.get("word", "")
+        word = clean_internet_word(original_word)
 
         if not word:
+            rejected_words.append((original_word, "not a clean spelling word"))
             continue
 
-        if word in current_words or word in pending_words:
+        if word in current_words:
+            rejected_words.append((word, "already in your main word list"))
+            continue
+
+        if word in pending_words:
+            rejected_words.append((word, "already waiting in pending words"))
             continue
 
         definitions = item.get("defs", [])
+
         if definitions:
             meaning = clean_definition(definitions[0])
         else:
             meaning = "No meaning found yet."
 
         if not word_matches_search_topic(word, meaning, search_topic):
+            rejected_words.append((word, "did not match the topic"))
             continue
 
         if not word_matches_difficulty(word, meaning, difficulty):
+            rejected_words.append((word, "did not match the difficulty level"))
             continue
 
-        new_pending_words.append((word, meaning))
+        suggestions.append((word, meaning))
 
-    if not new_pending_words:
-        print("\nNo new words found for that topic.")
+    print("\nInternet Search Summary")
+    print("=======================")
+    print(f"Internet words checked: {len(data)}")
+    print(f"Good suggestions found: {len(suggestions)}")
+    print(f"Words filtered out: {len(rejected_words)}")
+
+    if rejected_words:
+        print("\nSome words were filtered out:")
+        for number, rejected in enumerate(rejected_words[:10], start=1):
+            word, reason = rejected
+            print(f"{number}. {word} - {reason}")
+
+        if len(rejected_words) > 10:
+            print(f"...and {len(rejected_words) - 10} more.")
+
+    if not suggestions:
+        print("\nNo good words were found after filtering.")
+        print("Try another topic or choose Mixed difficulty.")
+        return
+
+    print("\nInternet Word Suggestions")
+    print("=========================")
+
+    for number, suggestion in enumerate(suggestions, start=1):
+        word, meaning = suggestion
+        print(f"{number}. {word}")
+        print(f"   Meaning: {meaning}")
+
+    choice = input("\nWhich words do you want to keep? Type all, none, or numbers like 1,3,5: ").strip().lower()
+
+    if choice in ["none", "no", "n", "q", "quit", "menu"]:
+        print("\nNo internet words were saved.")
+        return
+
+    if choice == "all":
+        selected_words = suggestions
+    else:
+        selected_words = []
+
+        parts = choice.split(",")
+
+        for part in parts:
+            part = part.strip()
+
+            if not part:
+                continue
+
+            try:
+                selected_number = int(part)
+            except ValueError:
+                print(f"Skipping invalid choice: {part}")
+                continue
+
+            if 1 <= selected_number <= len(suggestions):
+                selected_words.append(suggestions[selected_number - 1])
+            else:
+                print(f"Skipping number out of range: {selected_number}")
+
+    if not selected_words:
+        print("\nNo valid words were selected.")
         return
 
     with open(PENDING_WORDS_FILE, "a") as file:
-        for word, meaning in new_pending_words:
+        for word, meaning in selected_words:
             file.write(f"{word}|{meaning}\n")
 
-    print(f"\nSaved {len(new_pending_words)} new word suggestion(s) to pending_words.txt.")
+    print(f"\nSaved {len(selected_words)} selected word(s) to pending_words.txt.")
     print("They were NOT added to your main word list yet.")
-    print("Use option 13 later to review pending words.")
+    print("Use option 13 to review pending words.")
+    print("Use option 14 to approve pending words.")
 
 
 def show_pending_words():
