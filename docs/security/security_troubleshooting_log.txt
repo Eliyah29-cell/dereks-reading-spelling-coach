@@ -1,0 +1,49 @@
+SECURITY TROUBLESHOOTING LOG
+
+Date:
+July 10, 2026
+
+System:
+Dell OptiPlex 7060
+Linux Mint
+
+Issue:
+clamav-daemon failed to start.
+
+Symptoms:
+- clamav-daemon showed a failed status.
+- The logs reported that ClamAV could not verify database integrity.
+- The affected file was the daily virus-definition database.
+
+Investigation:
+1. Checked whether freshclam was already running.
+2. Confirmed the automatic updater was active.
+3. Checked the clamav-daemon service.
+4. Read the service logs with journalctl.
+5. Inspected the files in /var/lib/clamav.
+
+Cause:
+The daily ClamAV database failed its integrity check.
+
+Actions:
+1. Stopped clamav-freshclam.
+2. Removed /var/lib/clamav/daily.cld.
+3. Ran sudo freshclam.
+4. Restarted clamav-freshclam.
+5. Restarted clamav-daemon.
+6. Verified the service status.
+
+Result:
+clamav-daemon is active and running.
+
+Scan verification:
+- Directories scanned: 6,546
+- Files scanned: 68,030
+- Data scanned: 7.90 GiB
+- Infected files: 0
+
+Lesson learned:
+- Read the logs before changing the system.
+- Replace only the damaged component.
+- Test after every repair.
+- Verify the final service status.
