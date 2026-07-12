@@ -59,3 +59,5 @@ the practice of interconnecting multiple computer networks, such that any pair o
 A network of networks.
 To reckon, calculate.
 A group or set of related things that operate together as a complex whole.
+The study of the relationship between words and their meanings.
+The act of writing a computer program.
