@@ -74,7 +74,7 @@ The application can also save:
 ---
 
 ## Confirmed Successful Tests
-
+All 18 main-menu options were manually tested. Each option opened and performed its primary function without crashing. Confirmed bugs and usability findings are documented in the sections below.
 The following core behaviors were confirmed:
 
 - Missed words can be displayed.
