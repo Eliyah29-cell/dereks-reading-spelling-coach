@@ -1147,4 +1147,5 @@ def main():
             print("\nPlease choose a valid option: 1 through 18.")
 
 
-main()
+if __name__ == "__main__":
+    main()
