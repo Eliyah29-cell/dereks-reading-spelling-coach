@@ -726,7 +726,7 @@ def approve_pending_words():
             continue
 
         approved_words.append(word)
-        approved_meanings.append(meaning.strip())
+        approved_meanings.append(f"{word}|{meaning.strip()}")
         current_words.add(word)
 
     if not approved_words:
@@ -760,14 +760,8 @@ def random_word_practice(words):
         print("No words found. Please add words first.")
         return
 
-    try:
-        with open(MEANINGS_FILE, "r") as file:
-            meanings = [line.strip() for line in file if line.strip()]
-    except FileNotFoundError:
-        meanings = []
-
-    if len(meanings) != len(words):
-        meanings = ["No meaning found yet."] * len(words)
+    saved_meanings = load_meanings()
+    meanings = [saved_meanings.get(word, "No meaning found yet.") for word in words]
 
     max_words = len(words)
 
@@ -798,6 +792,7 @@ def random_word_practice(words):
     for number, (word, meaning) in enumerate(selected_words, start=1):
         print(f"\nWord {number} of {amount}")
         print(f"Meaning: {meaning}")
+        pronounce_word(word)
 
         answer = input("Spell the word, or type q/menu to go back: ").strip().lower()
 
@@ -1080,6 +1075,7 @@ def random_practice_by_level():
         print(f"\nWord {number} of {amount}")
         print(f"Level: {selected_level}")
         print(f"Meaning: {meaning}")
+        pronounce_word(word)
 
         answer = input("Spell the word, or type q/menu to go back: ").strip().lower()
 
