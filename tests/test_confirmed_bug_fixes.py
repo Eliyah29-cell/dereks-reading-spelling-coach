@@ -109,10 +109,10 @@ def test_random_practice_by_level_pronounces_hidden_word_before_answer(monkeypat
     spoken_words = []
     monkeypatch.setattr(coach, "pronounce_word", lambda word: spoken_words.append(word))
 
-    answers = iter(["1", "1", "wrong"])
+    answers = iter(["2", "1", "wrong"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
 
-    coach.random_practice_by_level()
+    coach.random_practice_menu()
 
     assert spoken_words == ["router"]
     assert missed_file.read_text() == "router\n"
