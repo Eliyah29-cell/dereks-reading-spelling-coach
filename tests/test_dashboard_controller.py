@@ -412,3 +412,54 @@ def test_auto_scroll_event_controller_scrollbar_drag_up_pauses_and_down_does_not
     events.jump_to_current_question()
     assert state.auto_scroll_paused is False
     assert state.scroll_to_active_requested is True
+
+
+def test_actual_random_practice_back_button_path_returns_home_next():
+    controller = logic.DashboardController()
+    controller.open_activity("random_practice")
+    controller.push_screen("random_menu")
+    controller.replace_screen("random_menu")
+    controller.push_screen("random_amount")
+
+    controller.back_to_random_choices_from_amount()
+
+    assert controller.current_screen == "random_menu"
+    assert controller.back_stack == []
+    assert controller.back() == "home"
+
+
+def test_showing_jump_control_does_not_require_history_rebuild():
+    controller = logic.DashboardController()
+    state = logic.AutoScrollState()
+    prompt = logic.ActivityPrompt("router", "A device.", True, "Type the word.", 1, 1)
+    controller.add_prompt_to_history("Random Practice", prompt)
+    original_history = list(controller.activity_history)
+
+    state.manual_scroll_up()
+
+    assert state.should_show_jump_control is True
+    assert controller.activity_history == original_history
+
+
+def test_downward_scroll_to_bottom_resumes_auto_scroll_and_hides_jump_state():
+    state = logic.AutoScrollState()
+    events = logic.AutoScrollEventController(state)
+    state.manual_scroll_up()
+    assert state.should_show_jump_control is True
+
+    events.downward_scroll_finished_at_bottom(at_bottom=True)
+
+    assert state.auto_scroll_paused is False
+    assert state.should_show_jump_control is False
+    assert state.scroll_to_active_requested is False
+
+
+def test_downward_scroll_not_at_bottom_keeps_auto_scroll_paused():
+    state = logic.AutoScrollState()
+    events = logic.AutoScrollEventController(state)
+    state.manual_scroll_up()
+
+    events.downward_scroll_finished_at_bottom(at_bottom=False)
+
+    assert state.auto_scroll_paused is True
+    assert state.should_show_jump_control is True

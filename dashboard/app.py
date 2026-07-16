@@ -54,6 +54,7 @@ class DashboardApp:
         ttk.Button(top, text="Space+", command=self.increase_spacing).pack(side="right", padx=5)
         ttk.Button(top, text="Space-", command=self.decrease_spacing).pack(side="right", padx=5)
         ttk.Checkbutton(top, text="High contrast", variable=self.high_contrast, command=self.update_accessibility).pack(side="right", padx=5)
+        self.jump_button = ttk.Button(top, text="Jump to current question", command=self.jump_to_current_question)
 
         self.canvas = tk.Canvas(self.root, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=self.canvas.yview)
@@ -82,18 +83,19 @@ class DashboardApp:
 
     def on_mousewheel(self, event):
         self.scroll_events.mouse_wheel(event.delta, self.current_view in ["activity_prompt", "feedback"])
-        if self.auto_scroll.should_show_jump_control:
-            self.render_jump_control_if_needed()
+        self.update_jump_control_visibility()
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if event.delta < 0:
+            self.root.after_idle(self.maybe_resume_at_bottom)
 
     def on_linux_scroll_up(self, event):
         self.scroll_events.linux_button_4(self.current_view in ["activity_prompt", "feedback"])
-        if self.auto_scroll.should_show_jump_control:
-            self.render_jump_control_if_needed()
+        self.update_jump_control_visibility()
         self.canvas.yview_scroll(-3, "units")
 
     def on_linux_scroll_down(self, event):
         self.canvas.yview_scroll(3, "units")
+        self.root.after_idle(self.maybe_resume_at_bottom)
 
     def remember_scrollbar_position(self, event):
         self.last_scrollbar_fraction = self.canvas.yview()[0]
@@ -101,41 +103,49 @@ class DashboardApp:
     def on_scrollbar_drag(self, event):
         current_fraction = self.canvas.yview()[0]
         self.scroll_events.scrollbar_drag(self.last_scrollbar_fraction, current_fraction, self.current_view in ["activity_prompt", "feedback"])
-        if self.auto_scroll.should_show_jump_control:
-            self.render_jump_control_if_needed()
+        self.update_jump_control_visibility()
+        if current_fraction > self.last_scrollbar_fraction:
+            self.root.after_idle(self.maybe_resume_at_bottom)
         self.last_scrollbar_fraction = current_fraction
 
     def pause_auto_scroll_for_manual_review(self):
         if self.current_view in ["activity_prompt", "feedback"]:
             self.auto_scroll.manual_scroll_up()
-            self.render_jump_control_if_needed()
+            self.update_jump_control_visibility()
 
-    def render_jump_control_if_needed(self):
-        if self.current_view in ["activity_prompt", "feedback"] and self.auto_scroll.should_show_jump_control:
-            self.render_current_view()
+    def update_jump_control_visibility(self):
+        if self.auto_scroll.should_show_jump_control and self.current_view in ["activity_prompt", "feedback"]:
+            if not self.jump_button.winfo_ismapped():
+                self.jump_button.pack(side="left", padx=5)
+        else:
+            if self.jump_button.winfo_ismapped():
+                self.jump_button.pack_forget()
 
     def on_keyboard_scroll(self, event):
         self.scroll_events.keyboard_scroll(event.keysym, self.current_view in ["activity_prompt", "feedback"])
-        if self.auto_scroll.should_show_jump_control:
-            self.render_jump_control_if_needed()
+        self.update_jump_control_visibility()
         if event.keysym == "Prior":
             self.canvas.yview_scroll(-1, "pages")
         elif event.keysym == "Next":
             self.canvas.yview_scroll(1, "pages")
+            self.root.after_idle(self.maybe_resume_at_bottom)
         elif event.keysym == "Home":
             self.canvas.yview_moveto(0)
         elif event.keysym == "End":
             self.canvas.yview_moveto(1)
+            self.root.after_idle(self.maybe_resume_at_bottom)
 
     def scroll_to_active_if_requested(self):
         if self.auto_scroll.scroll_to_active_requested:
             self.root.after_idle(lambda: self.canvas.yview_moveto(1.0))
             self.auto_scroll.mark_scrolled_to_active()
+            self.update_jump_control_visibility()
 
     def maybe_resume_at_bottom(self):
         bottom_fraction = self.canvas.yview()[1]
         if bottom_fraction >= 0.99:
             self.auto_scroll.manual_scroll_to_bottom()
+            self.update_jump_control_visibility()
 
     def update_accessibility(self):
         self.controller.update_display_settings(self.font_size.get(), self.spacing.get(), self.high_contrast.get())
@@ -196,6 +206,7 @@ class DashboardApp:
 
     def show_home(self):
         self.auto_scroll.reset_for_new_activity()
+        self.update_jump_control_visibility()
         self.controller.go_home()
         self.current_view = "home"
         self.clear()
@@ -343,7 +354,12 @@ class DashboardApp:
         entry.focus_set()
         entry.bind("<Return>", lambda event: self.start_random_from_amount())
         self.make_button(self.main, "Start Random Practice", self.start_random_from_amount, enabled=max_words > 0)
-        self.make_button(self.main, "Back to Random Practice choices", lambda: self.show_random_menu(push=False))
+        self.make_button(self.main, "Back to Random Practice choices", self.back_to_random_choices)
+
+
+    def back_to_random_choices(self):
+        self.controller.back_to_random_choices_from_amount()
+        self.show_random_menu(push=False)
 
     def start_random_from_amount(self):
         valid, amount, message = validate_random_practice_amount(self.amount_var.get(), len(self.random_group_words))
@@ -379,8 +395,7 @@ class DashboardApp:
         self.clear()
         self.auto_scroll.add_active_output()
         self.heading(self.main, self.active_session.activity_label)
-        if self.auto_scroll.should_show_jump_control:
-            self.make_button(self.main, "Jump to current question", self.jump_to_current_question)
+        self.update_jump_control_visibility()
         self.render_activity_history()
         self.make_button(self.main, "Repeat Word", self.active_session.repeat_word)
         entry = tk.Entry(self.main, textvariable=self.answer_var, font=("Arial", self.font_size.get()))
@@ -393,6 +408,7 @@ class DashboardApp:
 
     def jump_to_current_question(self):
         self.scroll_events.jump_to_current_question()
+        self.update_jump_control_visibility()
         self.canvas.yview_moveto(1.0)
         if self.current_view == "feedback" and self.controller.current_feedback:
             self.show_feedback(self.controller.current_feedback, push=False, add_to_history=False)
@@ -416,8 +432,7 @@ class DashboardApp:
         self.clear()
         self.auto_scroll.add_active_output()
         self.heading(self.main, "Feedback")
-        if self.auto_scroll.should_show_jump_control:
-            self.make_button(self.main, "Jump to current question", self.jump_to_current_question)
+        self.update_jump_control_visibility()
         self.render_activity_history()
         if feedback.finished:
             self.make_button(self.main, "Return Home", self.show_home)

@@ -175,6 +175,10 @@ class DashboardController:
     def replace_screen(self, screen_name: str):
         self.current_screen = screen_name
 
+    def back_to_random_choices_from_amount(self):
+        self.back_stack.clear()
+        self.current_screen = "random_menu"
+
     def back(self) -> str:
         if self.back_stack:
             self.current_screen = self.back_stack.pop()
@@ -384,6 +388,10 @@ class AutoScrollEventController:
     def scrollbar_drag(self, previous_fraction: float, current_fraction: float, in_activity: bool):
         if in_activity and current_fraction < previous_fraction:
             self.auto_scroll_state.manual_scroll_up()
+
+    def downward_scroll_finished_at_bottom(self, at_bottom: bool):
+        if at_bottom:
+            self.auto_scroll_state.manual_scroll_to_bottom()
 
     def jump_to_current_question(self):
         self.auto_scroll_state.jump_to_current_question()
