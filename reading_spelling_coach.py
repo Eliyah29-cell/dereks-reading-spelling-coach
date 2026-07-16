@@ -1,5 +1,7 @@
 import random
 from datetime import datetime
+from dataclasses import dataclass
+
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -130,12 +132,72 @@ def clear_missed_words():
         file.write("")
 
 
-def save_score(score, total):
+@dataclass
+class ScoreRecord:
+    date_text: str
+    score: int
+    total: int
+    activity: str | None = None
+    raw_line: str = ""
+
+
+def format_score_record(score, total, activity=None):
     now = datetime.now()
     date_text = now.strftime("%Y-%m-%d %I:%M %p")
 
+    if activity:
+        return f"{date_text} | {activity} | Score: {score} out of {total}"
+
+    return f"{date_text} | Score: {score} out of {total}"
+
+
+def parse_score_record(score_line):
+    try:
+        parts = [part.strip() for part in score_line.strip().split("|")]
+        score_part = next(part for part in parts if part.startswith("Score:"))
+        score_text = score_part.split("Score:", 1)[1].strip()
+        score_value, total_text = score_text.split(" out of ", 1)
+        score = int(score_value.strip())
+        total = int(total_text.strip().split()[0])
+
+        if total <= 0:
+            return None
+
+        activity = None
+        score_index = parts.index(score_part)
+        if score_index >= 2:
+            activity = parts[score_index - 1] or None
+
+        return ScoreRecord(parts[0], score, total, activity, score_line.strip())
+    except (StopIteration, IndexError, ValueError):
+        return None
+
+
+def load_score_records(file_name=None):
+    if file_name is None:
+        file_name = SCORE_HISTORY_FILE
+
+    try:
+        with open(file_name, "r") as file:
+            lines = [line.strip() for line in file if line.strip()]
+    except FileNotFoundError:
+        return []
+
+    records = []
+    for line in lines:
+        record = parse_score_record(line)
+        if record:
+            records.append(record)
+    return records
+
+
+def calculate_score_percentages(score_records):
+    return [(record.score / record.total) * 100 for record in score_records if record.total > 0]
+
+
+def save_score(score, total, activity=None):
     with open(SCORE_HISTORY_FILE, "a") as file:
-        file.write(f"{date_text} | Score: {score} out of {total}\n")
+        file.write(format_score_record(score, total, activity) + "\n")
 
 
 def show_score_history():
@@ -221,10 +283,10 @@ def show_progress_report():
     parsed_scores = []
 
     for score_line in scores:
-        parsed_score = parse_score_line(score_line)
+        parsed_score = parse_score_record(score_line)
 
         if parsed_score:
-            parsed_scores.append(parsed_score)
+            parsed_scores.append((parsed_score.score, parsed_score.total, (parsed_score.score / parsed_score.total) * 100))
 
     print("\nProgress Report")
     print("================")
@@ -814,7 +876,7 @@ def random_word_practice(words):
             break
 
     print(f"\nRandom practice complete. Score: {score} out of {amount}")
-    save_score(score, amount)
+    save_score(score, amount, activity="Random Practice")
 
 
 def random_practice_menu():
@@ -947,7 +1009,7 @@ def spelling_test(words):
     print("==========================")
     print(f"Score: {score} out of {len(test_words)}")
 
-    save_score(score, len(test_words))
+    save_score(score, len(test_words), activity="Spelling Test")
 
     if missed_words:
         print("\nWords to practice again:")

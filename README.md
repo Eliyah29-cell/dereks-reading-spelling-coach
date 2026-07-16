@@ -93,3 +93,20 @@ This project uses the MIT License.
 That means other people can use, study, change, and share the code as long as the license notice stays with the project.
 
 See the `LICENSE` file for details. 
+## Dashboard Prototype 1
+
+Dashboard Prototype 1 is a separate local desktop interface. It does not replace the terminal app.
+
+Start the dashboard from the project folder with:
+
+```bash
+python -m dashboard.app
+```
+
+Return to the terminal version at any time with:
+
+```bash
+python reading_spelling_coach.py
+```
+
+The dashboard uses Python Tkinter from the standard library. It runs locally, does not require a paid service, and does not expose the app to the public internet.

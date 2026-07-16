@@ -723,3 +723,41 @@ It is not ready for public release, but it already demonstrates practical value 
 - Focus and repetition
 
 The project will continue carefully, with testing, accessibility, backup safety, and learner needs taking priority over speed.
+
+---
+
+## Dashboard Prototype 1 Status
+
+Dashboard Prototype 1 has been added for human review. It is a local Tkinter desktop dashboard that runs separately from the terminal application.
+
+### Prototype 1 decisions
+
+- The terminal application remains available as the fallback interface.
+- The dashboard starts with `python -m dashboard.app`.
+- Tkinter was chosen because it is included with normal Python installs, avoids a web server, avoids paid services, works offline, and keeps the prototype low risk on Linux Mint.
+- A browser-based dashboard remains a possible future option for phone or tablet support, but it would require more web-server code and security review.
+- No deployment has been performed.
+
+### Prototype 1 features
+
+- Grouped dashboard home screen for Practice, Word Library, Review and Progress, and Application controls.
+- Separate activity screen instead of one long terminal-style menu.
+- Random Practice dashboard flow with visible word, meaning, repeat pronunciation, answer entry, scoring, and missed-word saving.
+- Spelling Test dashboard flow with hidden word before answer, repeat pronunciation, answer entry, scoring, and reveal after an incorrect answer.
+- Score history now supports new activity labels while preserving old unlabeled score records.
+- Dashboard Clear Missed Words asks for confirmation before clearing.
+- Basic adjustable text size and high-contrast display controls are included.
+- Auto-scroll state logic is present for keeping the active prompt visible while allowing manual review pauses.
+
+### Future missed-word improvement recorded
+
+A future version should add a learner-controlled `Mark as learned` action. The learner should confirm removal, only the selected word should be removed, and missed words should not be removed automatically after a correct practice answer.
+
+### Known Prototype 1 limits
+
+- Visual accessibility has not been fully tested by Derek yet.
+- Phone and tablet support is not implemented yet.
+- Some dashboard buttons are wired as Prototype 1 placeholders and still direct the learner to use the terminal workflow for full behavior.
+- Dashboard Random Practice and Spelling Test currently start with one word to keep the prototype small and safe.
+- Internet-word workflows are not run during automated tests and need more dashboard-specific implementation later.
+- Backup workflows are not run from automated tests.
