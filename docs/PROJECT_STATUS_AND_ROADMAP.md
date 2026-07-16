@@ -797,3 +797,18 @@ Unfinished Prototype 1 dashboard controls:
 - Show Pending Words
 - Approve Pending Words
 - Progress Report
+
+### Dashboard Prototype 1 Final Revision Notes for PR #7
+
+The final pre-visual-test revision corrected remaining review blockers:
+
+- Feedback is now stored as dashboard state, so text-size, spacing, and high-contrast changes redraw the same feedback view instead of returning to the previous question.
+- Activity history is retained during practice and spelling sessions so the learner can scroll upward to review previous prompts, submitted answers, corrections, revealed spellings, and completion results.
+- Spelling Test prompts still hide the target word in history before the answer.
+- Auto-scroll is connected to activity history and event handling. Upward mouse-wheel scrolling, Linux Button-4 scrolling, Page Up, Home, and upward scrollbar dragging pause auto-scroll during activities and show `Jump to current question` immediately.
+- Starting a new activity and returning Home reset activity-specific auto-scroll state.
+- Dashboard Spelling Test copies and shuffles the word list before starting, without modifying the original loaded list.
+- Random Practice amount entry now rejects empty, non-numeric, zero, negative, and above-maximum values with a short range message.
+- Random Practice Back navigation now returns from amount screen to Random Practice choices, then directly to Dashboard Home.
+
+Codex automated tests passed, but Derek still needs to perform visual Tkinter testing on Linux Mint before merge approval.

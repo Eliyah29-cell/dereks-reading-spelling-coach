@@ -21,6 +21,24 @@ class ActivityFeedback:
     finished: bool = False
     question_number: int = 0
     total_questions: int = 0
+    final_score: int | None = None
+    final_total: int | None = None
+
+
+@dataclass
+class ActivityHistoryItem:
+    item_type: str
+    activity_label: str
+    question_number: int
+    total_questions: int
+    instruction: str = ""
+    visible_word: str | None = None
+    meaning: str = ""
+    submitted_answer: str | None = None
+    feedback_message: str = ""
+    revealed_word: str | None = None
+    score: int | None = None
+    total_answered: int | None = None
 
 
 @dataclass
@@ -32,6 +50,11 @@ class DisplaySettings:
 
 class AutoScrollState:
     def __init__(self):
+        self.auto_scroll_paused = False
+        self.should_show_jump_control = False
+        self.scroll_to_active_requested = False
+
+    def reset_for_new_activity(self):
         self.auto_scroll_paused = False
         self.should_show_jump_control = False
         self.scroll_to_active_requested = False
@@ -48,6 +71,11 @@ class AutoScrollState:
     def manual_scroll_up(self):
         self.auto_scroll_paused = True
         self.should_show_jump_control = True
+        self.scroll_to_active_requested = False
+
+    def manual_scroll_to_bottom(self):
+        self.auto_scroll_paused = False
+        self.should_show_jump_control = False
         self.scroll_to_active_requested = False
 
     def jump_to_current_question(self):
@@ -77,6 +105,8 @@ class DashboardController:
         self.current_screen = "home"
         self.back_stack: list[str] = []
         self.display_settings = DisplaySettings()
+        self.current_feedback: ActivityFeedback | None = None
+        self.activity_history: list[ActivityHistoryItem] = []
 
     def home_model(self) -> dict[str, dict[str, str]]:
         return {
@@ -135,10 +165,14 @@ class DashboardController:
         self.active_activity = None
         self.current_screen = "home"
         self.back_stack.clear()
+        self.current_feedback = None
 
     def push_screen(self, screen_name: str):
         if self.current_screen != screen_name:
             self.back_stack.append(self.current_screen)
+        self.current_screen = screen_name
+
+    def replace_screen(self, screen_name: str):
         self.current_screen = screen_name
 
     def back(self) -> str:
@@ -161,6 +195,36 @@ class DashboardController:
         if high_contrast is not None:
             self.display_settings.high_contrast = high_contrast
 
+    def start_activity_history(self):
+        self.activity_history = []
+        self.current_feedback = None
+
+    def add_prompt_to_history(self, activity_label: str, prompt: ActivityPrompt):
+        self.activity_history.append(ActivityHistoryItem(
+            item_type="prompt",
+            activity_label=activity_label,
+            question_number=prompt.question_number,
+            total_questions=prompt.total_questions,
+            instruction=prompt.instruction,
+            visible_word=prompt.word if prompt.word_visible else None,
+            meaning=prompt.meaning if prompt.word_visible else "",
+        ))
+
+    def add_feedback_to_history(self, activity_label: str, feedback: ActivityFeedback, submitted_answer: str):
+        self.current_feedback = feedback
+        self.current_screen = "feedback"
+        self.activity_history.append(ActivityHistoryItem(
+            item_type="feedback",
+            activity_label=activity_label,
+            question_number=feedback.question_number,
+            total_questions=feedback.total_questions,
+            submitted_answer=submitted_answer,
+            feedback_message=feedback.message,
+            revealed_word=feedback.revealed_word,
+            score=feedback.final_score,
+            total_answered=feedback.final_total,
+        ))
+
 
 def select_random_words(words: Sequence[str], amount: int, random_sample: Callable[[Sequence[str], int], list[str]] | None = None) -> list[str]:
     clean_words = [word for word in words if word]
@@ -170,6 +234,29 @@ def select_random_words(words: Sequence[str], amount: int, random_sample: Callab
     if random_sample is None:
         random_sample = random.sample
     return list(random_sample(clean_words, amount))
+
+
+def validate_random_practice_amount(amount_text: str, maximum: int) -> tuple[bool, int | None, str]:
+    message = f"Choose a number from 1 through {maximum}."
+    if maximum < 1:
+        return False, None, "No words are available."
+    if not amount_text.strip():
+        return False, None, message
+    try:
+        amount = int(amount_text.strip())
+    except ValueError:
+        return False, None, message
+    if amount < 1 or amount > maximum:
+        return False, None, message
+    return True, amount, ""
+
+
+def prepare_spelling_test_words(words: Sequence[str], shuffle_words: Callable[[list[str]], None] | None = None) -> list[str]:
+    test_words = [word for word in words if word]
+    if shuffle_words is None:
+        shuffle_words = random.shuffle
+    shuffle_words(test_words)
+    return test_words
 
 
 class MultiWordActivity:
@@ -240,7 +327,7 @@ class MultiWordActivity:
 
         self.index += 1
         self._save_score_once_if_finished()
-        return ActivityFeedback(correct, message, revealed_word, self.finished, current_number, self.total_questions)
+        return ActivityFeedback(correct, message, revealed_word, self.finished, current_number, self.total_questions, self.score if self.finished else None, self.answered_count if self.finished else None)
 
 
 class RandomPracticeSession(MultiWordActivity):
@@ -276,3 +363,27 @@ class SpellingTestSession(MultiWordActivity):
             return ActivityPrompt(None, "", False, "No words are available.", 0, 0)
         self.pronounce_word(word)
         return ActivityPrompt(None, "", False, "Listen to the word, then spell it from memory.", self.question_number, self.total_questions)
+
+
+class AutoScrollEventController:
+    def __init__(self, auto_scroll_state: AutoScrollState):
+        self.auto_scroll_state = auto_scroll_state
+
+    def mouse_wheel(self, delta: int, in_activity: bool):
+        if in_activity and delta > 0:
+            self.auto_scroll_state.manual_scroll_up()
+
+    def linux_button_4(self, in_activity: bool):
+        if in_activity:
+            self.auto_scroll_state.manual_scroll_up()
+
+    def keyboard_scroll(self, key_name: str, in_activity: bool):
+        if in_activity and key_name in ["Prior", "Home"]:
+            self.auto_scroll_state.manual_scroll_up()
+
+    def scrollbar_drag(self, previous_fraction: float, current_fraction: float, in_activity: bool):
+        if in_activity and current_fraction < previous_fraction:
+            self.auto_scroll_state.manual_scroll_up()
+
+    def jump_to_current_question(self):
+        self.auto_scroll_state.jump_to_current_question()

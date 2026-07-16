@@ -241,3 +241,174 @@ def test_auto_scroll_tracks_real_ui_requests_for_pause_and_jump():
     state.jump_to_current_question()
     assert state.should_show_jump_control is False
     assert state.scroll_to_active_requested is True
+
+
+def test_feedback_view_state_survives_display_setting_changes_and_keeps_final_score():
+    controller = logic.DashboardController()
+    activity = logic.RandomPracticeSession(
+        words=["router"],
+        meanings={},
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    prompt = activity.start()
+    controller.add_prompt_to_history(activity.activity_label, prompt)
+    feedback = activity.submit_answer("router")
+    controller.add_feedback_to_history(activity.activity_label, feedback, "router")
+
+    for setting_update in [
+        {"font_size": 24},
+        {"spacing": 20},
+        {"high_contrast": True},
+    ]:
+        controller.update_display_settings(**setting_update)
+        assert controller.current_screen == "feedback"
+        assert controller.current_feedback.message == "Correct! Great job."
+        assert controller.current_feedback.final_score == 1
+        assert controller.current_feedback.final_total == 1
+        assert activity.current_word is None
+        assert activity.finished is True
+
+
+def test_activity_history_retains_questions_feedback_and_hides_spelling_prompt_word():
+    controller = logic.DashboardController()
+    random_activity = logic.RandomPracticeSession(
+        words=["router"],
+        meanings={"router": "A network device."},
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    random_prompt = random_activity.start()
+    controller.add_prompt_to_history(random_activity.activity_label, random_prompt)
+    random_feedback = random_activity.submit_answer("wrong")
+    controller.add_feedback_to_history(random_activity.activity_label, random_feedback, "wrong")
+
+    spelling_activity = logic.SpellingTestSession(
+        words=["secret"],
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    spelling_prompt = spelling_activity.start()
+    controller.add_prompt_to_history(spelling_activity.activity_label, spelling_prompt)
+
+    assert controller.activity_history[0].visible_word == "router"
+    assert controller.activity_history[0].meaning == "A network device."
+    assert controller.activity_history[1].submitted_answer == "wrong"
+    assert controller.activity_history[1].revealed_word == "router"
+    assert controller.activity_history[2].activity_label == "Spelling Test"
+    assert controller.activity_history[2].visible_word is None
+    assert "secret" not in str(controller.activity_history[2])
+
+
+def test_scrollbar_drag_upward_pauses_and_jump_resumes_auto_scroll_state():
+    state = logic.AutoScrollState()
+    state.add_active_output()
+    state.mark_scrolled_to_active()
+
+    state.manual_scroll_up()
+    assert state.auto_scroll_paused is True
+    assert state.should_show_jump_control is True
+    assert state.scroll_to_active_requested is False
+
+    state.jump_to_current_question()
+    assert state.auto_scroll_paused is False
+    assert state.should_show_jump_control is False
+    assert state.scroll_to_active_requested is True
+
+
+def test_new_activity_and_home_reset_auto_scroll_state():
+    state = logic.AutoScrollState()
+    state.manual_scroll_up()
+    assert state.auto_scroll_paused is True
+
+    state.reset_for_new_activity()
+    assert state.auto_scroll_paused is False
+    assert state.should_show_jump_control is False
+    assert state.scroll_to_active_requested is False
+
+
+def test_home_page_scroll_does_not_pause_new_activity_auto_scroll():
+    state = logic.AutoScrollState()
+    # Home-page scrolling is intentionally not represented as an activity manual_scroll_up call.
+    assert state.auto_scroll_paused is False
+    state.reset_for_new_activity()
+    assert state.add_active_output() is True
+
+
+def test_prepare_spelling_test_words_shuffles_copy_without_modifying_original():
+    original_words = ["router", "firewall", "malware"]
+
+    def fake_shuffle(words):
+        words[:] = ["malware", "router", "firewall"]
+
+    shuffled = logic.prepare_spelling_test_words(original_words, shuffle_words=fake_shuffle)
+
+    assert shuffled == ["malware", "router", "firewall"]
+    assert original_words == ["router", "firewall", "malware"]
+    assert sorted(shuffled) == sorted(original_words)
+
+
+def test_random_practice_amount_validation_rejects_invalid_values_and_accepts_bounds():
+    invalid_values = ["", "abc", "0", "-1", "4"]
+
+    for value in invalid_values:
+        valid, amount, message = logic.validate_random_practice_amount(value, 3)
+        assert valid is False
+        assert amount is None
+        assert message == "Choose a number from 1 through 3."
+
+    assert logic.validate_random_practice_amount("1", 3) == (True, 1, "")
+    assert logic.validate_random_practice_amount("3", 3) == (True, 3, "")
+
+
+def test_random_practice_back_path_returns_to_home_without_stale_state():
+    controller = logic.DashboardController()
+    controller.push_screen("random_menu")
+    controller.replace_screen("random_menu")
+    controller.push_screen("random_amount")
+
+    assert controller.back() == "random_menu"
+    assert controller.back() == "home"
+
+
+def test_auto_scroll_event_controller_pauses_only_activity_upward_scrolls():
+    state = logic.AutoScrollState()
+    events = logic.AutoScrollEventController(state)
+
+    events.mouse_wheel(delta=120, in_activity=False)
+    assert state.auto_scroll_paused is False
+
+    events.mouse_wheel(delta=120, in_activity=True)
+    assert state.auto_scroll_paused is True
+    assert state.should_show_jump_control is True
+
+    state.reset_for_new_activity()
+    events.linux_button_4(in_activity=True)
+    assert state.auto_scroll_paused is True
+
+    state.reset_for_new_activity()
+    events.keyboard_scroll("Prior", in_activity=True)
+    assert state.auto_scroll_paused is True
+
+    state.reset_for_new_activity()
+    events.keyboard_scroll("Next", in_activity=True)
+    assert state.auto_scroll_paused is False
+
+
+def test_auto_scroll_event_controller_scrollbar_drag_up_pauses_and_down_does_not():
+    state = logic.AutoScrollState()
+    events = logic.AutoScrollEventController(state)
+
+    events.scrollbar_drag(previous_fraction=0.2, current_fraction=0.4, in_activity=True)
+    assert state.auto_scroll_paused is False
+
+    events.scrollbar_drag(previous_fraction=0.4, current_fraction=0.2, in_activity=True)
+    assert state.auto_scroll_paused is True
+    assert state.should_show_jump_control is True
+
+    events.jump_to_current_question()
+    assert state.auto_scroll_paused is False
+    assert state.scroll_to_active_requested is True

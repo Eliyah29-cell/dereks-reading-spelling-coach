@@ -7,11 +7,14 @@ from tkinter import messagebox, ttk
 
 import reading_spelling_coach as coach
 from dashboard.logic import (
+    AutoScrollEventController,
     AutoScrollState,
     DashboardController,
     RandomPracticeSession,
     SpellingTestSession,
+    prepare_spelling_test_words,
     select_random_words,
+    validate_random_practice_amount,
 )
 
 
@@ -21,6 +24,7 @@ class DashboardApp:
         self.root.title("Derek's Reading & Spelling Coach Dashboard")
         self.controller = DashboardController()
         self.auto_scroll = AutoScrollState()
+        self.scroll_events = AutoScrollEventController(self.auto_scroll)
         self.font_size = tk.IntVar(value=self.controller.display_settings.font_size)
         self.spacing = tk.IntVar(value=self.controller.display_settings.spacing)
         self.high_contrast = tk.BooleanVar(value=self.controller.display_settings.high_contrast)
@@ -64,6 +68,9 @@ class DashboardApp:
         self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
         self.canvas.bind_all("<Button-4>", self.on_linux_scroll_up)
         self.canvas.bind_all("<Button-5>", self.on_linux_scroll_down)
+        self.scrollbar.bind("<ButtonPress-1>", self.remember_scrollbar_position)
+        self.scrollbar.bind("<B1-Motion>", self.on_scrollbar_drag)
+        self.last_scrollbar_fraction = 0.0
         for key in ["<Prior>", "<Next>", "<Home>", "<End>"]:
             self.root.bind(key, self.on_keyboard_scroll)
 
@@ -74,20 +81,43 @@ class DashboardApp:
         self.canvas.itemconfigure(self.canvas_window, width=event.width)
 
     def on_mousewheel(self, event):
-        if event.delta > 0:
-            self.auto_scroll.manual_scroll_up()
+        self.scroll_events.mouse_wheel(event.delta, self.current_view in ["activity_prompt", "feedback"])
+        if self.auto_scroll.should_show_jump_control:
+            self.render_jump_control_if_needed()
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def on_linux_scroll_up(self, event):
-        self.auto_scroll.manual_scroll_up()
+        self.scroll_events.linux_button_4(self.current_view in ["activity_prompt", "feedback"])
+        if self.auto_scroll.should_show_jump_control:
+            self.render_jump_control_if_needed()
         self.canvas.yview_scroll(-3, "units")
 
     def on_linux_scroll_down(self, event):
         self.canvas.yview_scroll(3, "units")
 
-    def on_keyboard_scroll(self, event):
-        if event.keysym in ["Prior", "Home"]:
+    def remember_scrollbar_position(self, event):
+        self.last_scrollbar_fraction = self.canvas.yview()[0]
+
+    def on_scrollbar_drag(self, event):
+        current_fraction = self.canvas.yview()[0]
+        self.scroll_events.scrollbar_drag(self.last_scrollbar_fraction, current_fraction, self.current_view in ["activity_prompt", "feedback"])
+        if self.auto_scroll.should_show_jump_control:
+            self.render_jump_control_if_needed()
+        self.last_scrollbar_fraction = current_fraction
+
+    def pause_auto_scroll_for_manual_review(self):
+        if self.current_view in ["activity_prompt", "feedback"]:
             self.auto_scroll.manual_scroll_up()
+            self.render_jump_control_if_needed()
+
+    def render_jump_control_if_needed(self):
+        if self.current_view in ["activity_prompt", "feedback"] and self.auto_scroll.should_show_jump_control:
+            self.render_current_view()
+
+    def on_keyboard_scroll(self, event):
+        self.scroll_events.keyboard_scroll(event.keysym, self.current_view in ["activity_prompt", "feedback"])
+        if self.auto_scroll.should_show_jump_control:
+            self.render_jump_control_if_needed()
         if event.keysym == "Prior":
             self.canvas.yview_scroll(-1, "pages")
         elif event.keysym == "Next":
@@ -101,6 +131,11 @@ class DashboardApp:
         if self.auto_scroll.scroll_to_active_requested:
             self.root.after_idle(lambda: self.canvas.yview_moveto(1.0))
             self.auto_scroll.mark_scrolled_to_active()
+
+    def maybe_resume_at_bottom(self):
+        bottom_fraction = self.canvas.yview()[1]
+        if bottom_fraction >= 0.99:
+            self.auto_scroll.manual_scroll_to_bottom()
 
     def update_accessibility(self):
         self.controller.update_display_settings(self.font_size.get(), self.spacing.get(), self.high_contrast.get())
@@ -160,6 +195,7 @@ class DashboardApp:
         return label
 
     def show_home(self):
+        self.auto_scroll.reset_for_new_activity()
         self.controller.go_home()
         self.current_view = "home"
         self.clear()
@@ -190,7 +226,9 @@ class DashboardApp:
         elif self.current_view == "random_amount":
             self.show_random_amount(push=False)
         elif self.current_view == "activity_prompt" and self.current_prompt:
-            self.show_activity_prompt(self.current_prompt, push=False)
+            self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
+        elif self.current_view == "feedback" and self.controller.current_feedback:
+            self.show_feedback(self.controller.current_feedback, push=False, add_to_history=False)
         elif self.current_view == "score_history":
             self.show_score_history(push=False)
         elif self.current_view == "lines":
@@ -208,6 +246,8 @@ class DashboardApp:
             self.show_random_menu(push=False)
         elif previous == "random_amount":
             self.show_random_amount(push=False)
+        elif previous == "home":
+            self.show_home()
         else:
             self.show_home()
 
@@ -287,6 +327,7 @@ class DashboardApp:
     def choose_random_group(self, words):
         self.random_group_words = list(words)
         self.amount_var.set("1")
+        self.controller.replace_screen("random_menu")
         self.show_random_amount(push=True)
 
     def show_random_amount(self, push=True):
@@ -305,39 +346,42 @@ class DashboardApp:
         self.make_button(self.main, "Back to Random Practice choices", lambda: self.show_random_menu(push=False))
 
     def start_random_from_amount(self):
-        try:
-            amount = int(self.amount_var.get())
-        except ValueError:
-            messagebox.showerror("Choose a number", "Please enter a number.")
+        valid, amount, message = validate_random_practice_amount(self.amount_var.get(), len(self.random_group_words))
+        if not valid:
+            messagebox.showerror("Choose a number", message)
             return
         selected_words = select_random_words(self.random_group_words, amount)
+        self.auto_scroll.reset_for_new_activity()
+        self.controller.start_activity_history()
         self.active_session = RandomPracticeSession(selected_words, coach.load_meanings(), coach.save_missed_word, coach.save_score, coach.pronounce_word)
         self.controller.push_screen("activity_prompt")
         self.current_prompt = self.active_session.start()
-        self.show_activity_prompt(self.current_prompt, push=False)
+        self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
     def start_spelling_test(self, push=True):
         if push:
             self.controller.push_screen("activity_prompt")
-        self.active_session = SpellingTestSession(coach.load_words(), coach.save_missed_word, coach.save_score, coach.pronounce_word)
+        self.auto_scroll.reset_for_new_activity()
+        self.controller.start_activity_history()
+        spelling_words = prepare_spelling_test_words(coach.load_words())
+        self.active_session = SpellingTestSession(spelling_words, coach.save_missed_word, coach.save_score, coach.pronounce_word)
         self.current_prompt = self.active_session.start()
-        self.show_activity_prompt(self.current_prompt, push=False)
+        self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
-    def show_activity_prompt(self, prompt, push=True):
+    def show_activity_prompt(self, prompt, push=True, add_to_history=False):
         if push:
             self.controller.push_screen("activity_prompt")
         self.current_view = "activity_prompt"
         self.current_prompt = prompt
+        self.controller.current_feedback = None
+        if add_to_history:
+            self.controller.add_prompt_to_history(self.active_session.activity_label, prompt)
         self.clear()
         self.auto_scroll.add_active_output()
         self.heading(self.main, self.active_session.activity_label)
         if self.auto_scroll.should_show_jump_control:
             self.make_button(self.main, "Jump to current question", self.jump_to_current_question)
-        progress = f"Question {prompt.question_number} of {prompt.total_questions}"
-        text = f"{progress}\n{prompt.instruction}"
-        if prompt.word_visible and prompt.word:
-            text += f"\n\nWord: {prompt.word}\nMeaning: {prompt.meaning}"
-        self.body_text(self.main, text)
+        self.render_activity_history()
         self.make_button(self.main, "Repeat Word", self.active_session.repeat_word)
         entry = tk.Entry(self.main, textvariable=self.answer_var, font=("Arial", self.font_size.get()))
         entry.pack(fill="x", padx=14, pady=14, ipady=8)
@@ -348,28 +392,56 @@ class DashboardApp:
         self.scroll_to_active_if_requested()
 
     def jump_to_current_question(self):
-        self.auto_scroll.jump_to_current_question()
+        self.scroll_events.jump_to_current_question()
         self.canvas.yview_moveto(1.0)
-        if self.current_prompt:
-            self.show_activity_prompt(self.current_prompt, push=False)
+        if self.current_view == "feedback" and self.controller.current_feedback:
+            self.show_feedback(self.controller.current_feedback, push=False, add_to_history=False)
+        elif self.current_prompt:
+            self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
 
     def submit_answer(self):
-        feedback = self.active_session.submit_answer(self.answer_var.get())
+        submitted_answer = self.answer_var.get()
+        feedback = self.active_session.submit_answer(submitted_answer)
         self.answer_var.set("")
+        self.show_feedback(feedback, submitted_answer=submitted_answer, add_to_history=True)
+
+    def show_feedback(self, feedback, push=True, submitted_answer="", add_to_history=False):
+        if push:
+            self.controller.push_screen("feedback")
+        self.current_view = "feedback"
+        if add_to_history:
+            self.controller.add_feedback_to_history(self.active_session.activity_label, feedback, submitted_answer)
+        else:
+            self.controller.current_feedback = feedback
         self.clear()
         self.auto_scroll.add_active_output()
         self.heading(self.main, "Feedback")
-        self.body_text(self.main, f"Question {feedback.question_number} of {feedback.total_questions}\n{feedback.message}")
+        if self.auto_scroll.should_show_jump_control:
+            self.make_button(self.main, "Jump to current question", self.jump_to_current_question)
+        self.render_activity_history()
         if feedback.finished:
-            self.body_text(self.main, f"Activity complete. Score: {self.active_session.score} out of {self.active_session.answered_count}")
             self.make_button(self.main, "Return Home", self.show_home)
         else:
             self.make_button(self.main, "Next Question", self.next_question)
         self.scroll_to_active_if_requested()
 
+    def render_activity_history(self):
+        for item in self.controller.activity_history:
+            if item.item_type == "prompt":
+                text = f"Question {item.question_number} of {item.total_questions}\n{item.instruction}"
+                if item.visible_word:
+                    text += f"\nWord: {item.visible_word}\nMeaning: {item.meaning}"
+            else:
+                text = f"Question {item.question_number} of {item.total_questions} feedback\nYour answer: {item.submitted_answer}\n{item.feedback_message}"
+                if item.revealed_word:
+                    text += f"\nCorrect spelling: {item.revealed_word}"
+                if item.score is not None and item.total_answered is not None:
+                    text += f"\nActivity complete. Score: {item.score} out of {item.total_answered}"
+            self.body_text(self.main, text)
+
     def next_question(self):
         self.current_prompt = self.active_session.start()
-        self.show_activity_prompt(self.current_prompt, push=False)
+        self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
 
 def main():
