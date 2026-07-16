@@ -723,3 +723,92 @@ It is not ready for public release, but it already demonstrates practical value 
 - Focus and repetition
 
 The project will continue carefully, with testing, accessibility, backup safety, and learner needs taking priority over speed.
+
+---
+
+## Dashboard Prototype 1 Status
+
+Dashboard Prototype 1 has been added for human review. It is a local Tkinter desktop dashboard that runs separately from the terminal application.
+
+### Prototype 1 decisions
+
+- The terminal application remains available as the fallback interface.
+- The dashboard starts with `python -m dashboard.app`.
+- Tkinter was chosen because it is included with normal Python installs, avoids a web server, avoids paid services, works offline, and keeps the prototype low risk on Linux Mint.
+- A browser-based dashboard remains a possible future option for phone or tablet support, but it would require more web-server code and security review.
+- No deployment has been performed.
+
+### Prototype 1 features
+
+- Grouped dashboard home screen for Practice, Word Library, Review and Progress, and Application controls.
+- Separate activity screen instead of one long terminal-style menu.
+- Random Practice dashboard flow with visible word, meaning, repeat pronunciation, answer entry, scoring, and missed-word saving.
+- Spelling Test dashboard flow with hidden word before answer, repeat pronunciation, answer entry, scoring, and reveal after an incorrect answer.
+- Score history now supports new activity labels while preserving old unlabeled score records.
+- Dashboard Clear Missed Words asks for confirmation before clearing.
+- Basic adjustable text size and high-contrast display controls are included.
+- Auto-scroll state logic is present for keeping the active prompt visible while allowing manual review pauses.
+
+### Future missed-word improvement recorded
+
+A future version should add a learner-controlled `Mark as learned` action. The learner should confirm removal, only the selected word should be removed, and missed words should not be removed automatically after a correct practice answer.
+
+### Known Prototype 1 limits
+
+- Visual accessibility has not been fully tested by Derek yet.
+- Phone and tablet support is not implemented yet.
+- Some dashboard buttons are wired as Prototype 1 placeholders and still direct the learner to use the terminal workflow for full behavior.
+- Dashboard Random Practice and Spelling Test currently start with one word to keep the prototype small and safe.
+- Internet-word workflows are not run during automated tests and need more dashboard-specific implementation later.
+- Backup workflows are not run from automated tests.
+
+### Dashboard Prototype 1 Revision Notes
+
+Human review found blockers in the first dashboard prototype. The revision corrected these items before local testing:
+
+- Dashboard Home now uses a scrollable Tkinter canvas with a scrollbar, mouse-wheel support, and keyboard scrolling for Page Up, Page Down, Home, and End.
+- Prototype 1 buttons are now clearly classified: finished controls are clickable, and unfinished controls are disabled with `Not available in Prototype 1` in the label.
+- Random Practice no longer silently uses only the first word. The learner chooses a group, chooses how many words to practice from 1 through the available maximum, and the dashboard uses random selection.
+- Spelling Test no longer silently uses only the first word. It uses the current spelling-test word set and shows question number and total.
+- The real Tkinter dashboard now calls the auto-scroll state when activity prompts and feedback are shown, detects manual upward scrolling, and provides `Jump to current question` when auto-scroll is paused.
+- Accessibility changes for text size, spacing, and high contrast re-render the current view without creating a new activity session.
+- Back and Home are now different: Home returns to Dashboard Home, while Back returns to the previous dashboard screen where possible.
+
+Functional Prototype 1 dashboard controls:
+
+- Spelling Test
+- Random Practice
+- Show Word List
+- Show Word Meanings
+- Show Missed Words
+- Clear Missed Words
+- Score History
+- Return Home
+- Exit Dashboard
+
+Unfinished Prototype 1 dashboard controls:
+
+- Practice All Words
+- Practice by Level
+- Practice Missed Words
+- Add a New Word
+- Pronounce a Word
+- Get New Words from the Internet
+- Show Pending Words
+- Approve Pending Words
+- Progress Report
+
+### Dashboard Prototype 1 Final Revision Notes for PR #7
+
+The final pre-visual-test revision corrected remaining review blockers:
+
+- Feedback is now stored as dashboard state, so text-size, spacing, and high-contrast changes redraw the same feedback view instead of returning to the previous question.
+- Activity history is retained during practice and spelling sessions so the learner can scroll upward to review previous prompts, submitted answers, corrections, revealed spellings, and completion results.
+- Spelling Test prompts still hide the target word in history before the answer.
+- Auto-scroll is connected to activity history and event handling. Upward mouse-wheel scrolling, Linux Button-4 scrolling, Page Up, Home, and upward scrollbar dragging pause auto-scroll during activities and show `Jump to current question` immediately.
+- Starting a new activity and returning Home reset activity-specific auto-scroll state.
+- Dashboard Spelling Test copies and shuffles the word list before starting, without modifying the original loaded list.
+- Random Practice amount entry now rejects empty, non-numeric, zero, negative, and above-maximum values with a short range message.
+- Random Practice Back navigation now returns from amount screen to Random Practice choices, then directly to Dashboard Home.
+
+Codex automated tests passed, but Derek still needs to perform visual Tkinter testing on Linux Mint before merge approval.
