@@ -110,3 +110,134 @@ def test_auto_scroll_state_pauses_and_jump_restores_current_prompt():
     state.jump_to_current_question()
     assert state.should_show_jump_control is False
     assert state.add_active_output() is True
+
+
+def test_home_model_marks_unfinished_controls_as_not_functional():
+    controller = logic.DashboardController()
+
+    assert "Random Practice" in controller.functional_control_labels()
+    assert "Spelling Test" in controller.functional_control_labels()
+    assert "Practice All Words" in controller.unfinished_control_labels()
+    assert controller.is_functional("practice_all_words") is False
+
+
+def test_back_returns_to_previous_dashboard_screen():
+    controller = logic.DashboardController()
+    controller.push_screen("random_menu")
+    controller.push_screen("random_amount")
+    controller.push_screen("activity_prompt")
+
+    assert controller.back() == "random_amount"
+    assert controller.back() == "random_menu"
+    assert controller.back() == "home"
+
+
+def test_select_random_words_uses_mocked_random_sample_for_multi_word_sessions():
+    calls = []
+
+    def fake_sample(words, amount):
+        calls.append((list(words), amount))
+        return ["router", "firewall"]
+
+    selected = logic.select_random_words(["router", "firewall", "malware"], 2, random_sample=fake_sample)
+
+    assert selected == ["router", "firewall"]
+    assert calls == [(["router", "firewall", "malware"], 2)]
+
+
+def test_random_practice_multi_word_question_numbers_and_final_score():
+    spoken = []
+    saved = []
+    missed = []
+    activity = logic.RandomPracticeSession(
+        words=["router", "firewall"],
+        meanings={"router": "A network device.", "firewall": "A security tool."},
+        save_missed_word=missed.append,
+        save_score=lambda score, total, activity: saved.append((score, total, activity)),
+        pronounce_word=fake_pronouncer(spoken),
+    )
+
+    first_prompt = activity.start()
+    assert first_prompt.question_number == 1
+    assert first_prompt.total_questions == 2
+    assert first_prompt.word == "router"
+    first_feedback = activity.submit_answer("router")
+    assert first_feedback.finished is False
+
+    second_prompt = activity.start()
+    assert second_prompt.question_number == 2
+    assert second_prompt.total_questions == 2
+    assert second_prompt.word == "firewall"
+    second_feedback = activity.submit_answer("wrong")
+
+    assert second_feedback.finished is True
+    assert activity.score == 1
+    assert activity.answered_count == 2
+    assert missed == ["firewall"]
+    assert saved == [(1, 2, "Random Practice")]
+
+
+def test_spelling_test_multi_word_hides_each_word_and_saves_final_score():
+    spoken = []
+    saved = []
+    activity = logic.SpellingTestSession(
+        words=["router", "firewall"],
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: saved.append((score, total, activity)),
+        pronounce_word=fake_pronouncer(spoken),
+    )
+
+    first_prompt = activity.start()
+    assert first_prompt.word is None
+    assert first_prompt.word_visible is False
+    assert first_prompt.question_number == 1
+    activity.submit_answer("router")
+
+    second_prompt = activity.start()
+    assert second_prompt.word is None
+    assert second_prompt.word_visible is False
+    assert second_prompt.question_number == 2
+    activity.submit_answer("firewall")
+
+    assert spoken == ["router", "firewall"]
+    assert saved == [(2, 2, "Spelling Test")]
+
+
+def test_display_setting_changes_do_not_reset_active_session_state():
+    controller = logic.DashboardController()
+    activity = logic.RandomPracticeSession(
+        words=["router", "firewall"],
+        meanings={},
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    activity.start()
+    activity.submit_answer("router")
+
+    controller.update_display_settings(font_size=22, spacing=18, high_contrast=True)
+
+    assert activity.current_word == "firewall"
+    assert activity.score == 1
+    assert activity.answered_count == 1
+    assert controller.display_settings.font_size == 22
+    assert controller.display_settings.spacing == 18
+    assert controller.display_settings.high_contrast is True
+
+
+def test_auto_scroll_tracks_real_ui_requests_for_pause_and_jump():
+    state = logic.AutoScrollState()
+
+    assert state.add_active_output() is True
+    assert state.scroll_to_active_requested is True
+    state.mark_scrolled_to_active()
+    assert state.scroll_to_active_requested is False
+
+    state.manual_scroll_up()
+    assert state.add_active_output() is False
+    assert state.should_show_jump_control is True
+    assert state.scroll_to_active_requested is False
+
+    state.jump_to_current_question()
+    assert state.should_show_jump_control is False
+    assert state.scroll_to_active_requested is True

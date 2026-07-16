@@ -761,3 +761,39 @@ A future version should add a learner-controlled `Mark as learned` action. The l
 - Dashboard Random Practice and Spelling Test currently start with one word to keep the prototype small and safe.
 - Internet-word workflows are not run during automated tests and need more dashboard-specific implementation later.
 - Backup workflows are not run from automated tests.
+
+### Dashboard Prototype 1 Revision Notes
+
+Human review found blockers in the first dashboard prototype. The revision corrected these items before local testing:
+
+- Dashboard Home now uses a scrollable Tkinter canvas with a scrollbar, mouse-wheel support, and keyboard scrolling for Page Up, Page Down, Home, and End.
+- Prototype 1 buttons are now clearly classified: finished controls are clickable, and unfinished controls are disabled with `Not available in Prototype 1` in the label.
+- Random Practice no longer silently uses only the first word. The learner chooses a group, chooses how many words to practice from 1 through the available maximum, and the dashboard uses random selection.
+- Spelling Test no longer silently uses only the first word. It uses the current spelling-test word set and shows question number and total.
+- The real Tkinter dashboard now calls the auto-scroll state when activity prompts and feedback are shown, detects manual upward scrolling, and provides `Jump to current question` when auto-scroll is paused.
+- Accessibility changes for text size, spacing, and high contrast re-render the current view without creating a new activity session.
+- Back and Home are now different: Home returns to Dashboard Home, while Back returns to the previous dashboard screen where possible.
+
+Functional Prototype 1 dashboard controls:
+
+- Spelling Test
+- Random Practice
+- Show Word List
+- Show Word Meanings
+- Show Missed Words
+- Clear Missed Words
+- Score History
+- Return Home
+- Exit Dashboard
+
+Unfinished Prototype 1 dashboard controls:
+
+- Practice All Words
+- Practice by Level
+- Practice Missed Words
+- Add a New Word
+- Pronounce a Word
+- Get New Words from the Internet
+- Show Pending Words
+- Approve Pending Words
+- Progress Report
