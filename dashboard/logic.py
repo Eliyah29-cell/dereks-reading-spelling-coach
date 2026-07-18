@@ -11,6 +11,7 @@ class ActivityPrompt:
     instruction: str
     question_number: int
     total_questions: int
+    expected_word: str | None = None
 
 
 @dataclass
@@ -89,13 +90,22 @@ class AutoScrollState:
 
 class DashboardController:
     functional_activities = {
+        "practice_all_words",
         "spelling_test",
         "random_practice",
+        "practice_by_level",
+        "practice_missed_words",
+        "add_word",
         "word_list",
         "word_meanings",
+        "pronounce_word",
+        "internet_words",
+        "pending_words",
+        "approve_pending_words",
         "missed_words",
         "clear_missed_words",
         "score_history",
+        "progress_report",
         "home",
         "exit",
     }
@@ -282,6 +292,8 @@ class MultiWordActivity:
         self.answered_count = 0
         self.finished = False
         self.score_saved = False
+        self.awaiting_feedback_acknowledgement = False
+        self.last_answered_word: str | None = None
 
     @property
     def total_questions(self) -> int:
@@ -300,9 +312,13 @@ class MultiWordActivity:
         return self.words[self.index]
 
     def repeat_word(self):
-        word = self.current_word
+        word = self.last_answered_word if self.awaiting_feedback_acknowledgement else self.current_word
         if word:
             self.pronounce_word(word)
+
+    def advance_after_feedback(self):
+        self.awaiting_feedback_acknowledgement = False
+        self._save_score_once_if_finished()
 
     def _save_score_once_if_finished(self):
         if self.index >= len(self.words):
@@ -311,15 +327,18 @@ class MultiWordActivity:
                 self.save_score(self.score, self.answered_count, self.activity_label)
                 self.score_saved = True
 
-    def submit_answer(self, answer: str) -> ActivityFeedback:
+    def submit_answer(self, answer: str, expected_word: str | None = None) -> ActivityFeedback:
         word = self.current_word
         if word is None:
             return ActivityFeedback(False, "This activity is finished.", finished=True, question_number=self.question_number, total_questions=self.total_questions)
+        if expected_word is not None and expected_word != word:
+            return ActivityFeedback(False, "That old question is no longer active. Please answer the current word.", question_number=self.question_number, total_questions=self.total_questions)
 
         current_number = self.question_number
         answer = answer.strip().lower()
         correct = answer == word.lower()
         self.answered_count += 1
+        self.last_answered_word = word
         if correct:
             self.score += 1
             message = "Correct! Great job."
@@ -330,8 +349,35 @@ class MultiWordActivity:
             revealed_word = word
 
         self.index += 1
+        self.awaiting_feedback_acknowledgement = True
         self._save_score_once_if_finished()
         return ActivityFeedback(correct, message, revealed_word, self.finished, current_number, self.total_questions, self.score if self.finished else None, self.answered_count if self.finished else None)
+
+
+class PracticeWordsSession(MultiWordActivity):
+    activity_label = "Practice All Words"
+
+    def __init__(self, words, meanings, save_missed_word, save_score, pronounce_word, activity_label=None):
+        super().__init__(words, save_missed_word, save_score, pronounce_word)
+        self.meanings = meanings
+        if activity_label:
+            self.activity_label = activity_label
+
+    def start(self) -> ActivityPrompt:
+        word = self.current_word
+        if not word:
+            self.finished = True
+            return ActivityPrompt(None, "", True, "No words are available.", 0, 0)
+        self.pronounce_word(word)
+        return ActivityPrompt(
+            word,
+            self.meanings.get(word, "No meaning saved yet."),
+            True,
+            "Read the word and meaning, then type the word.",
+            self.question_number,
+            self.total_questions,
+            word,
+        )
 
 
 class RandomPracticeSession(MultiWordActivity):
@@ -354,6 +400,7 @@ class RandomPracticeSession(MultiWordActivity):
             "Read the word and meaning, then type the word.",
             self.question_number,
             self.total_questions,
+            word,
         )
 
 
@@ -366,7 +413,7 @@ class SpellingTestSession(MultiWordActivity):
             self.finished = True
             return ActivityPrompt(None, "", False, "No words are available.", 0, 0)
         self.pronounce_word(word)
-        return ActivityPrompt(None, "", False, "Listen to the word, then spell it from memory.", self.question_number, self.total_questions)
+        return ActivityPrompt(None, "", False, "Listen to the word, then spell it from memory.", self.question_number, self.total_questions, word)
 
 
 class AutoScrollEventController:

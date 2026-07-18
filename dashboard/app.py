@@ -10,6 +10,7 @@ from dashboard.logic import (
     AutoScrollEventController,
     AutoScrollState,
     DashboardController,
+    PracticeWordsSession,
     RandomPracticeSession,
     SpellingTestSession,
     prepare_spelling_test_words,
@@ -32,8 +33,11 @@ class DashboardApp:
         self.current_prompt = None
         self.current_view = "home"
         self.random_group_words: list[str] = []
+        self.spelling_test_words: list[str] = []
         self.answer_var = tk.StringVar()
         self.amount_var = tk.StringVar(value="1")
+        self.word_var = tk.StringVar()
+        self.meaning_var = tk.StringVar()
         self.build_shell()
         self.show_home()
 
@@ -236,6 +240,14 @@ class DashboardApp:
             self.show_random_menu(push=False)
         elif self.current_view == "random_amount":
             self.show_random_amount(push=False)
+        elif self.current_view == "spelling_amount":
+            self.show_spelling_amount(push=False)
+        elif self.current_view == "add_word":
+            self.show_add_word(push=False)
+        elif self.current_view == "pronounce_word":
+            self.show_pronounce_word(push=False)
+        elif self.current_view == "approve_pending_words":
+            self.show_approve_pending_words(push=False)
         elif self.current_view == "activity_prompt" and self.current_prompt:
             self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
         elif self.current_view == "feedback" and self.controller.current_feedback:
@@ -257,8 +269,18 @@ class DashboardApp:
             self.show_random_menu(push=False)
         elif previous == "random_amount":
             self.show_random_amount(push=False)
-        elif previous == "home":
-            self.show_home()
+        elif previous == "spelling_amount":
+            self.show_spelling_amount(push=False)
+        elif previous == "activity_prompt" and self.current_prompt:
+            self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
+        elif previous == "feedback" and self.controller.current_feedback:
+            self.show_feedback(self.controller.current_feedback, push=False, add_to_history=False)
+        elif previous == "add_word":
+            self.show_add_word(push=False)
+        elif previous == "pronounce_word":
+            self.show_pronounce_word(push=False)
+        elif previous == "approve_pending_words":
+            self.show_approve_pending_words(push=False)
         else:
             self.show_home()
 
@@ -268,10 +290,28 @@ class DashboardApp:
         self.controller.open_activity(activity)
         if activity == "random_practice":
             self.show_random_menu(push=push)
+        elif activity == "practice_all_words":
+            self.start_practice_words(coach.load_words(), "Practice All Words", push=push)
+        elif activity == "practice_by_level":
+            self.show_random_menu(push=push)
+        elif activity == "practice_missed_words":
+            self.start_practice_words(coach.load_missed_words(), "Practice Missed Words", push=push)
         elif activity == "spelling_test":
-            self.start_spelling_test(push=push)
+            self.show_spelling_amount(push=push)
+        elif activity == "add_word":
+            self.show_add_word(push=push)
+        elif activity == "pronounce_word":
+            self.show_pronounce_word(push=push)
+        elif activity == "internet_words":
+            self.show_internet_words()
+        elif activity == "pending_words":
+            self.show_pending_words(push=push)
+        elif activity == "approve_pending_words":
+            self.show_approve_pending_words(push=push)
         elif activity == "score_history":
             self.show_score_history(push=push)
+        elif activity == "progress_report":
+            self.show_progress_report(push=push)
         elif activity == "clear_missed_words":
             self.confirm_clear_missed_words()
         elif activity == "missed_words":
@@ -283,6 +323,15 @@ class DashboardApp:
             self.show_lines("Word Meanings", [f"{w}: {meanings.get(w, 'No meaning saved yet.')}" for w in coach.load_words()], push=push)
         elif activity == "exit":
             self.root.destroy()
+
+    def start_practice_words(self, words, label, push=True):
+        if push:
+            self.controller.push_screen("activity_prompt")
+        self.auto_scroll.reset_for_new_activity()
+        self.controller.start_activity_history()
+        self.active_session = PracticeWordsSession(list(words), coach.load_meanings(), coach.save_missed_word, coach.save_score, coach.pronounce_word, label)
+        self.current_prompt = self.active_session.start()
+        self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
     def show_lines(self, title, lines, push=True):
         if push:
@@ -309,6 +358,52 @@ class DashboardApp:
             lines.append(f"{record.date_text} | {activity} | Score: {record.score} out of {record.total}")
         self.show_lines("Score History", lines or ["No scores saved yet."], push=False)
         self.current_view = "score_history"
+
+    def show_progress_report(self, push=True):
+        if push:
+            self.controller.push_screen("lines")
+        words = coach.load_words()
+        meanings = coach.load_meanings()
+        missed = coach.load_missed_words()
+        pending = self.load_pending_word_pairs()
+        records = coach.load_score_records()
+        lines = [
+            f"Total words: {len(words)}",
+            f"Total meanings: {len(meanings)}",
+            f"Pending internet words: {len(pending)}",
+            f"Missed words to practice: {len(missed)}",
+            f"Saved score records: {len(records)}",
+        ]
+        if records:
+            percentages = coach.calculate_score_percentages(records)
+            lines.append(f"Latest score: {records[-1].score} out of {records[-1].total}")
+            lines.append(f"Best score percent: {max(percentages):.1f}%")
+            lines.append(f"Average score percent: {sum(percentages) / len(percentages):.1f}%")
+        self.show_lines("Progress Report", lines, push=False)
+        self.current_view = "progress_report"
+
+    def show_pending_words(self, push=True):
+        pairs = self.load_pending_word_pairs()
+        lines = [f"{word}: {meaning}" for word, meaning in pairs] or ["No pending words yet."]
+        self.show_lines("Pending Internet Words", lines, push=push)
+        self.current_view = "pending_words"
+
+    def load_pending_word_pairs(self):
+        try:
+            with open(coach.PENDING_WORDS_FILE, "r") as file:
+                lines = [line.strip() for line in file if line.strip()]
+        except FileNotFoundError:
+            return []
+        pairs = []
+        for line in lines:
+            if "|" in line:
+                word, meaning = line.split("|", 1)
+            else:
+                word, meaning = line, "No meaning found yet."
+            word = coach.clean_internet_word(word)
+            if word:
+                pairs.append((word, meaning.strip()))
+        return pairs
 
     def confirm_clear_missed_words(self):
         if messagebox.askyesno("Clear missed words?", "Clear all missed words? This cannot be undone."):
@@ -356,6 +451,121 @@ class DashboardApp:
         self.make_button(self.main, "Start Random Practice", self.start_random_from_amount, enabled=max_words > 0)
         self.make_button(self.main, "Back to Random Practice choices", self.back_to_random_choices)
 
+    def show_spelling_amount(self, push=True):
+        if push:
+            self.controller.push_screen("spelling_amount")
+        self.current_view = "spelling_amount"
+        self.spelling_test_words = prepare_spelling_test_words(coach.load_words())
+        max_words = len(self.spelling_test_words)
+        self.clear()
+        self.heading(self.main, "Spelling Test")
+        self.body_text(self.main, f"Choose a word count from 1 through {max_words}, or type all for every word.")
+        entry = tk.Entry(self.main, textvariable=self.amount_var, font=("Arial", self.font_size.get()))
+        entry.pack(fill="x", padx=14, pady=14, ipady=8)
+        entry.bind("<Return>", lambda event: self.start_spelling_test_from_amount())
+        self.make_button(self.main, "Start Spelling Test", self.start_spelling_test_from_amount, enabled=max_words > 0)
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def start_spelling_test_from_amount(self):
+        text = self.amount_var.get().strip().lower()
+        if text == "all":
+            selected_words = self.spelling_test_words
+        else:
+            valid, amount, message = validate_random_practice_amount(text, len(self.spelling_test_words))
+            if not valid:
+                messagebox.showerror("Choose a number", message)
+                return
+            selected_words = self.spelling_test_words[:amount]
+        self.start_spelling_test(selected_words, push=True)
+
+    def show_add_word(self, push=True):
+        if push:
+            self.controller.push_screen("add_word")
+        self.current_view = "add_word"
+        self.clear()
+        self.heading(self.main, "Add New Word")
+        self.body_text(self.main, "Type one new practice word and an optional meaning.")
+        tk.Entry(self.main, textvariable=self.word_var, font=("Arial", self.font_size.get())).pack(fill="x", padx=14, pady=8, ipady=8)
+        tk.Entry(self.main, textvariable=self.meaning_var, font=("Arial", self.font_size.get())).pack(fill="x", padx=14, pady=8, ipady=8)
+        self.make_button(self.main, "Save Word", self.save_new_word)
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def save_new_word(self):
+        word = coach.clean_internet_word(self.word_var.get())
+        if not word:
+            messagebox.showerror("Word needed", "Please enter a word using letters or hyphens.")
+            return
+        words = coach.load_words()
+        if word not in words:
+            words.append(word)
+            coach.save_words(words)
+        meaning = self.meaning_var.get().strip()
+        if meaning:
+            meanings = coach.load_meanings()
+            meanings[word] = meaning
+            with open(coach.MEANINGS_FILE, "w") as file:
+                for saved_word, saved_meaning in meanings.items():
+                    file.write(f"{saved_word}|{saved_meaning}\n")
+        self.show_lines("Add New Word", [f"Saved word: {word}"], push=False)
+
+    def show_pronounce_word(self, push=True):
+        if push:
+            self.controller.push_screen("pronounce_word")
+        self.current_view = "pronounce_word"
+        self.clear()
+        self.heading(self.main, "Pronounce")
+        tk.Entry(self.main, textvariable=self.word_var, font=("Arial", self.font_size.get())).pack(fill="x", padx=14, pady=14, ipady=8)
+        self.make_button(self.main, "Pronounce Word", self.pronounce_entered_word)
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def pronounce_entered_word(self):
+        word = self.word_var.get().strip()
+        if word:
+            coach.pronounce_word(word)
+
+    def show_internet_words(self):
+        self.show_lines(
+            "Internet Words Review Before Save",
+            ["Use the terminal fallback for internet search review in this prototype.", "Dashboard approval can review pending words before saving them."],
+        )
+
+    def show_approve_pending_words(self, push=True):
+        if push:
+            self.controller.push_screen("approve_pending_words")
+        self.current_view = "approve_pending_words"
+        self.clear()
+        self.heading(self.main, "Approve Selected Internet Words")
+        self.pending_selection_vars = []
+        for word, meaning in self.load_pending_word_pairs():
+            selected = tk.BooleanVar(value=False)
+            self.pending_selection_vars.append((selected, word, meaning))
+            tk.Checkbutton(self.main, text=f"{word}: {meaning}", variable=selected, font=("Arial", self.font_size.get()), bg=self.colors()["bg"], fg=self.colors()["fg"]).pack(anchor="w", padx=14, pady=4)
+        if not self.pending_selection_vars:
+            self.body_text(self.main, "No pending words yet.")
+        self.make_button(self.main, "Approve Selected Words", self.approve_selected_pending_words, enabled=bool(self.pending_selection_vars))
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def approve_selected_pending_words(self):
+        selected = [(word, meaning) for var, word, meaning in self.pending_selection_vars if var.get()]
+        if not selected:
+            messagebox.showerror("Choose words", "Select at least one pending word to approve.")
+            return
+        current_words = coach.load_words()
+        meanings = coach.load_meanings()
+        for word, meaning in selected:
+            if word not in current_words:
+                current_words.append(word)
+            meanings.setdefault(word, meaning)
+        coach.save_words(current_words)
+        with open(coach.MEANINGS_FILE, "w") as file:
+            for word, meaning in meanings.items():
+                file.write(f"{word}|{meaning}\n")
+        remaining = [(word, meaning) for _, word, meaning in self.pending_selection_vars if (word, meaning) not in selected]
+        with open(coach.PENDING_WORDS_FILE, "w") as file:
+            for word, meaning in remaining:
+                file.write(f"{word}|{meaning}\n")
+        self.show_lines("Approve Selected Internet Words", [f"Approved {len(selected)} word(s)."], push=False)
+
 
     def back_to_random_choices(self):
         self.controller.back_to_random_choices_from_amount()
@@ -374,12 +584,12 @@ class DashboardApp:
         self.current_prompt = self.active_session.start()
         self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
-    def start_spelling_test(self, push=True):
+    def start_spelling_test(self, words=None, push=True):
         if push:
             self.controller.push_screen("activity_prompt")
         self.auto_scroll.reset_for_new_activity()
         self.controller.start_activity_history()
-        spelling_words = prepare_spelling_test_words(coach.load_words())
+        spelling_words = list(words) if words is not None else prepare_spelling_test_words(coach.load_words())
         self.active_session = SpellingTestSession(spelling_words, coach.save_missed_word, coach.save_score, coach.pronounce_word)
         self.current_prompt = self.active_session.start()
         self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
@@ -416,8 +626,10 @@ class DashboardApp:
             self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
 
     def submit_answer(self):
+        if not self.active_session or not self.current_prompt:
+            return
         submitted_answer = self.answer_var.get()
-        feedback = self.active_session.submit_answer(submitted_answer)
+        feedback = self.active_session.submit_answer(submitted_answer, expected_word=self.current_prompt.expected_word)
         self.answer_var.set("")
         self.show_feedback(feedback, submitted_answer=submitted_answer, add_to_history=True)
 
@@ -434,6 +646,8 @@ class DashboardApp:
         self.heading(self.main, "Feedback")
         self.update_jump_control_visibility()
         self.render_activity_history()
+        if not feedback.finished:
+            self.make_button(self.main, "Repeat Word", self.active_session.repeat_word)
         if feedback.finished:
             self.make_button(self.main, "Return Home", self.show_home)
         else:
@@ -455,6 +669,7 @@ class DashboardApp:
             self.body_text(self.main, text)
 
     def next_question(self):
+        self.active_session.advance_after_feedback()
         self.current_prompt = self.active_session.start()
         self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
 
