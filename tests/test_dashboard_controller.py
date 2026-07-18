@@ -112,13 +112,13 @@ def test_auto_scroll_state_pauses_and_jump_restores_current_prompt():
     assert state.add_active_output() is True
 
 
-def test_home_model_marks_unfinished_controls_as_not_functional():
+def test_home_model_marks_dashboard_workflows_as_functional():
     controller = logic.DashboardController()
 
     assert "Random Practice" in controller.functional_control_labels()
     assert "Spelling Test" in controller.functional_control_labels()
-    assert "Practice All Words" in controller.unfinished_control_labels()
-    assert controller.is_functional("practice_all_words") is False
+    assert "Practice All Words" in controller.functional_control_labels()
+    assert controller.is_functional("practice_all_words") is True
 
 
 def test_back_returns_to_previous_dashboard_screen():
