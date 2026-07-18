@@ -3,6 +3,9 @@ import random
 from typing import Callable, Sequence
 
 
+RANDOM_PRACTICE_MAX_WORDS = 5
+
+
 @dataclass
 class ActivityPrompt:
     word: str | None
@@ -251,6 +254,7 @@ def select_random_words(words: Sequence[str], amount: int, random_sample: Callab
 
 
 def validate_random_practice_amount(amount_text: str, maximum: int) -> tuple[bool, int | None, str]:
+    maximum = min(maximum, RANDOM_PRACTICE_MAX_WORDS)
     message = f"Choose a number from 1 through {maximum}."
     if maximum < 1:
         return False, None, "No words are available."
@@ -258,6 +262,24 @@ def validate_random_practice_amount(amount_text: str, maximum: int) -> tuple[boo
         return False, None, message
     try:
         amount = int(amount_text.strip())
+    except ValueError:
+        return False, None, message
+    if amount < 1 or amount > maximum:
+        return False, None, message
+    return True, amount, ""
+
+
+def validate_spelling_test_amount(amount_text: str, maximum: int) -> tuple[bool, int | None, str]:
+    message = f"Choose a number from 1 through {maximum}, or type all."
+    if maximum < 1:
+        return False, None, "No words are available."
+    text = amount_text.strip().lower()
+    if text == "all":
+        return True, maximum, ""
+    if not text:
+        return False, None, message
+    try:
+        amount = int(text)
     except ValueError:
         return False, None, message
     if amount < 1 or amount > maximum:
@@ -345,7 +367,7 @@ class MultiWordActivity:
             revealed_word = None
         else:
             self.save_missed_word(word)
-            message = f"Not quite. The correct spelling is: {word}"
+            message = "Not quite. Review the correct spelling below."
             revealed_word = word
 
         self.index += 1

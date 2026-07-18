@@ -16,6 +16,7 @@ from dashboard.logic import (
     prepare_spelling_test_words,
     select_random_words,
     validate_random_practice_amount,
+    validate_spelling_test_amount,
 )
 
 
@@ -38,6 +39,9 @@ class DashboardApp:
         self.amount_var = tk.StringVar(value="1")
         self.word_var = tk.StringVar()
         self.meaning_var = tk.StringVar()
+        self.topic_var = tk.StringVar()
+        self.internet_suggestions: list[tuple[str, str]] = []
+        self.internet_selection_vars: list[tuple[tk.BooleanVar, str, str]] = []
         self.build_shell()
         self.show_home()
 
@@ -246,6 +250,10 @@ class DashboardApp:
             self.show_add_word(push=False)
         elif self.current_view == "pronounce_word":
             self.show_pronounce_word(push=False)
+        elif self.current_view == "internet_words":
+            self.show_internet_words(push=False)
+        elif self.current_view == "practice_by_level":
+            self.show_practice_by_level(push=False)
         elif self.current_view == "approve_pending_words":
             self.show_approve_pending_words(push=False)
         elif self.current_view == "activity_prompt" and self.current_prompt:
@@ -279,6 +287,10 @@ class DashboardApp:
             self.show_add_word(push=False)
         elif previous == "pronounce_word":
             self.show_pronounce_word(push=False)
+        elif previous == "internet_words":
+            self.show_internet_words(push=False)
+        elif previous == "practice_by_level":
+            self.show_practice_by_level(push=False)
         elif previous == "approve_pending_words":
             self.show_approve_pending_words(push=False)
         else:
@@ -293,7 +305,7 @@ class DashboardApp:
         elif activity == "practice_all_words":
             self.start_practice_words(coach.load_words(), "Practice All Words", push=push)
         elif activity == "practice_by_level":
-            self.show_random_menu(push=push)
+            self.show_practice_by_level(push=push)
         elif activity == "practice_missed_words":
             self.start_practice_words(coach.load_missed_words(), "Practice Missed Words", push=push)
         elif activity == "spelling_test":
@@ -303,7 +315,7 @@ class DashboardApp:
         elif activity == "pronounce_word":
             self.show_pronounce_word(push=push)
         elif activity == "internet_words":
-            self.show_internet_words()
+            self.show_internet_words(push=push)
         elif activity == "pending_words":
             self.show_pending_words(push=push)
         elif activity == "approve_pending_words":
@@ -332,6 +344,10 @@ class DashboardApp:
         self.active_session = PracticeWordsSession(list(words), coach.load_meanings(), coach.save_missed_word, coach.save_score, coach.pronounce_word, label)
         self.current_prompt = self.active_session.start()
         self.show_activity_prompt(self.current_prompt, push=False, add_to_history=True)
+
+    def start_practice_level(self, level_name, words):
+        label = f"Practice by Level: {level_name.title()}"
+        self.start_practice_words(words, label, push=True)
 
     def show_lines(self, title, lines, push=True):
         if push:
@@ -430,6 +446,19 @@ class DashboardApp:
         self.make_button(self.main, "Return to dashboard", self.show_home)
         self.canvas.yview_moveto(0)
 
+    def show_practice_by_level(self, push=True):
+        if push:
+            self.controller.push_screen("practice_by_level")
+        self.current_view = "practice_by_level"
+        self.clear()
+        self.heading(self.main, "Practice by Level")
+        self.body_text(self.main, "Choose one existing level. The practice session will use that level's words.")
+        for level_name, words in coach.LEVELS.items():
+            label = f"{level_name.title()} ({len(words)} words)"
+            self.make_button(self.main, label, lambda level_name=level_name, words=words: self.start_practice_level(level_name, words), enabled=bool(words))
+        self.make_button(self.main, "Return to dashboard", self.show_home)
+        self.canvas.yview_moveto(0)
+
     def choose_random_group(self, words):
         self.random_group_words = list(words)
         self.amount_var.set("1")
@@ -440,10 +469,10 @@ class DashboardApp:
         if push:
             self.controller.push_screen("random_amount")
         self.current_view = "random_amount"
-        max_words = len(self.random_group_words)
+        max_words = min(len(self.random_group_words), 5)
         self.clear()
         self.heading(self.main, "How many words?")
-        self.body_text(self.main, f"Choose 1 through {max_words}. Choose 1 for quick testing or more for normal practice.")
+        self.body_text(self.main, f"Choose 1 through {max_words}. Random Practice is limited to 5 words at a time.")
         entry = tk.Entry(self.main, textvariable=self.amount_var, font=("Arial", self.font_size.get()))
         entry.pack(fill="x", padx=14, pady=14, ipady=8)
         entry.focus_set()
@@ -467,15 +496,11 @@ class DashboardApp:
         self.make_button(self.main, "Return Home", self.show_home)
 
     def start_spelling_test_from_amount(self):
-        text = self.amount_var.get().strip().lower()
-        if text == "all":
-            selected_words = self.spelling_test_words
-        else:
-            valid, amount, message = validate_random_practice_amount(text, len(self.spelling_test_words))
-            if not valid:
-                messagebox.showerror("Choose a number", message)
-                return
-            selected_words = self.spelling_test_words[:amount]
+        valid, amount, message = validate_spelling_test_amount(self.amount_var.get(), len(self.spelling_test_words))
+        if not valid:
+            messagebox.showerror("Choose a number", message)
+            return
+        selected_words = self.spelling_test_words[:amount]
         self.start_spelling_test(selected_words, push=True)
 
     def show_add_word(self, push=True):
@@ -501,11 +526,7 @@ class DashboardApp:
             coach.save_words(words)
         meaning = self.meaning_var.get().strip()
         if meaning:
-            meanings = coach.load_meanings()
-            meanings[word] = meaning
-            with open(coach.MEANINGS_FILE, "w") as file:
-                for saved_word, saved_meaning in meanings.items():
-                    file.write(f"{saved_word}|{saved_meaning}\n")
+            self.append_or_update_meaning_line(word, meaning)
         self.show_lines("Add New Word", [f"Saved word: {word}"], push=False)
 
     def show_pronounce_word(self, push=True):
@@ -523,11 +544,102 @@ class DashboardApp:
         if word:
             coach.pronounce_word(word)
 
-    def show_internet_words(self):
-        self.show_lines(
-            "Internet Words Review Before Save",
-            ["Use the terminal fallback for internet search review in this prototype.", "Dashboard approval can review pending words before saving them."],
-        )
+    def show_internet_words(self, push=True):
+        if push:
+            self.controller.push_screen("internet_words")
+        self.current_view = "internet_words"
+        self.clear()
+        self.heading(self.main, "Internet Words Review Before Save")
+        self.body_text(self.main, "Enter a topic. Suggestions will be shown for review before anything is saved.")
+        entry = tk.Entry(self.main, textvariable=self.topic_var, font=("Arial", self.font_size.get()))
+        entry.pack(fill="x", padx=14, pady=14, ipady=8)
+        entry.bind("<Return>", lambda event: self.fetch_internet_words_for_review())
+        self.make_button(self.main, "Find Internet Words", self.fetch_internet_words_for_review)
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def fetch_internet_words_for_review(self):
+        topic = self.topic_var.get().strip()
+        suggestions, error_message = self.fetch_internet_suggestions(topic)
+        if error_message:
+            self.show_lines("Internet Words Review Before Save", [error_message], push=False)
+            self.current_view = "internet_words"
+            return
+        self.show_internet_suggestions_for_review(suggestions, push=False)
+
+    def fetch_internet_suggestions(self, topic):
+        search_topic = coach.prepare_internet_search_topic(topic)
+        if not search_topic:
+            return [], "Please enter a search topic."
+        safe_topic = coach.urllib.parse.quote(search_topic)
+        url = f"https://api.datamuse.com/words?ml={safe_topic}&md=d&max=30"
+        try:
+            with coach.urllib.request.urlopen(url, timeout=10) as response:
+                data = coach.json.loads(response.read().decode("utf-8"))
+        except (coach.urllib.error.URLError, TimeoutError):
+            return [], "Internet connection failed safely. No words were saved."
+        current_words = coach.load_word_set(coach.WORDS_FILE)
+        pending_words = coach.load_word_set(coach.PENDING_WORDS_FILE)
+        suggestions = []
+        for item in data:
+            word = coach.clean_internet_word(item.get("word", ""))
+            if not word or word in current_words or word in pending_words:
+                continue
+            definitions = item.get("defs", [])
+            meaning = coach.clean_definition(definitions[0]) if definitions else "No meaning found yet."
+            if meaning == "No meaning found yet.":
+                meaning = coach.load_meanings().get(word, meaning)
+            if coach.word_matches_search_topic(word, meaning, search_topic) and coach.word_matches_difficulty(word, meaning, "mixed"):
+                suggestions.append((word, meaning))
+        return suggestions, ""
+
+    def show_internet_suggestions_for_review(self, suggestions, push=True):
+        if push:
+            self.controller.push_screen("internet_words")
+        self.current_view = "internet_words"
+        self.internet_suggestions = suggestions
+        self.internet_selection_vars = []
+        self.clear()
+        self.heading(self.main, "Review Internet Word Suggestions")
+        if not suggestions:
+            self.body_text(self.main, "No usable suggestions were found. Try another topic.")
+        for word, meaning in suggestions:
+            selected = tk.BooleanVar(value=False)
+            self.internet_selection_vars.append((selected, word, meaning))
+            tk.Checkbutton(self.main, text=f"{word}: {meaning}", variable=selected, font=("Arial", self.font_size.get()), bg=self.colors()["bg"], fg=self.colors()["fg"]).pack(anchor="w", padx=14, pady=4)
+        self.make_button(self.main, "Save Selected to Pending Words", self.save_selected_internet_words, enabled=bool(suggestions))
+        self.make_button(self.main, "Return Home", self.show_home)
+
+    def save_selected_internet_words(self):
+        selected = [(word, meaning) for var, word, meaning in self.internet_selection_vars if var.get()]
+        if not selected:
+            messagebox.showerror("Choose words", "Select at least one suggested word to save.")
+            return
+        with open(coach.PENDING_WORDS_FILE, "a") as file:
+            for word, meaning in selected:
+                file.write(f"{word}|{meaning}\n")
+        self.show_lines("Internet Words Review Before Save", [f"Saved {len(selected)} selected word(s) to pending words."], push=False)
+
+    def append_or_update_meaning_line(self, word, meaning):
+        try:
+            with open(coach.MEANINGS_FILE, "r") as file:
+                lines = file.readlines()
+        except FileNotFoundError:
+            lines = []
+        replacement = f"{word}|{meaning.strip()}\n"
+        updated = False
+        output_lines = []
+        for line in lines:
+            if "|" in line:
+                saved_word, _ = line.split("|", 1)
+                if saved_word.strip().lower() == word:
+                    output_lines.append(replacement)
+                    updated = True
+                    continue
+            output_lines.append(line)
+        if not updated:
+            output_lines.append(replacement)
+        with open(coach.MEANINGS_FILE, "w") as file:
+            file.writelines(output_lines)
 
     def show_approve_pending_words(self, push=True):
         if push:
@@ -551,15 +663,14 @@ class DashboardApp:
             messagebox.showerror("Choose words", "Select at least one pending word to approve.")
             return
         current_words = coach.load_words()
-        meanings = coach.load_meanings()
         for word, meaning in selected:
             if word not in current_words:
                 current_words.append(word)
-            meanings.setdefault(word, meaning)
         coach.save_words(current_words)
-        with open(coach.MEANINGS_FILE, "w") as file:
-            for word, meaning in meanings.items():
-                file.write(f"{word}|{meaning}\n")
+        existing_meanings = coach.load_meanings()
+        for word, meaning in selected:
+            if word not in existing_meanings:
+                self.append_or_update_meaning_line(word, meaning)
         remaining = [(word, meaning) for _, word, meaning in self.pending_selection_vars if (word, meaning) not in selected]
         with open(coach.PENDING_WORDS_FILE, "w") as file:
             for word, meaning in remaining:
@@ -646,7 +757,7 @@ class DashboardApp:
         self.heading(self.main, "Feedback")
         self.update_jump_control_visibility()
         self.render_activity_history()
-        if not feedback.finished:
+        if not feedback.correct:
             self.make_button(self.main, "Repeat Word", self.active_session.repeat_word)
         if feedback.finished:
             self.make_button(self.main, "Return Home", self.show_home)
