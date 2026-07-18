@@ -448,7 +448,7 @@ class DashboardApp:
 
     def load_pending_word_records(self):
         try:
-            with open(coach.PENDING_WORDS_FILE, "r") as file:
+            with open(coach.PENDING_WORDS_FILE, "r", newline="") as file:
                 lines = file.readlines()
         except FileNotFoundError:
             return []
@@ -624,7 +624,7 @@ class DashboardApp:
             self.current_view = "internet_search"
             self.controller.replace_screen("internet_search")
             return
-        self.show_internet_suggestions_for_review(suggestions, push=False)
+        self.show_internet_suggestions_for_review(suggestions, push=True)
 
     def fetch_internet_suggestions(self, topic):
         search_topic = coach.prepare_internet_search_topic(topic)
@@ -647,11 +647,22 @@ class DashboardApp:
         for item in data:
             if not isinstance(item, dict):
                 continue
-            word = coach.clean_internet_word(item.get("word", ""))
+            raw_word = item.get("word", "")
+            if not isinstance(raw_word, str):
+                continue
+            word = coach.clean_internet_word(raw_word)
             if not word or word in current_words or word in pending_words:
                 continue
             definitions = item.get("defs", [])
-            meaning = coach.clean_definition(definitions[0]) if definitions else "No meaning found yet."
+            if definitions and not isinstance(definitions, (list, tuple)):
+                continue
+            if definitions:
+                first_definition = definitions[0]
+                if not isinstance(first_definition, str):
+                    continue
+                meaning = coach.clean_definition(first_definition)
+            else:
+                meaning = "No meaning found yet."
             if meaning == "No meaning found yet.":
                 meaning = coach.load_meanings().get(word, meaning)
             if coach.word_matches_search_topic(word, meaning, search_topic) and coach.word_matches_difficulty(word, meaning, "mixed"):
@@ -762,7 +773,7 @@ class DashboardApp:
         for word, meaning, raw_line in selected:
             selected_line_counts[raw_line] = selected_line_counts.get(raw_line, 0) + 1
         try:
-            with open(coach.PENDING_WORDS_FILE, "r") as file:
+            with open(coach.PENDING_WORDS_FILE, "r", newline="") as file:
                 pending_lines = file.readlines()
         except FileNotFoundError:
             pending_lines = []
@@ -772,7 +783,7 @@ class DashboardApp:
                 selected_line_counts[line] -= 1
             else:
                 remaining_lines.append(line)
-        with open(coach.PENDING_WORDS_FILE, "w") as file:
+        with open(coach.PENDING_WORDS_FILE, "w", newline="") as file:
             file.writelines(remaining_lines)
         self.show_lines("Approve Selected Internet Words", [f"Approved {len(selected)} word(s)."], push=False)
 

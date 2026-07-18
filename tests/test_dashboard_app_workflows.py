@@ -229,10 +229,10 @@ def test_internet_search_reviews_and_saves_only_selected_suggestions(monkeypatch
     meanings_file.write_text("router|A network device.\n")
     pending_file.write_text("")
     dashboard = make_headless_app()
-    payload = (
-        b'[{"word": "firewall", "defs": ["n\\tA security barrier for network traffic."]},'
-        b' {"word": "malware", "defs": ["n\\tHarmful software for computers."]}]'
-    )
+    payload = coach.json.dumps([
+        {"word": "firewall", "defs": ["n\tA security barrier for network traffic."]},
+        {"word": "malware", "defs": ["n\tHarmful software for computers."]},
+    ]).encode("utf-8")
 
     monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
     monkeypatch.setattr(coach, "MEANINGS_FILE", str(meanings_file))
@@ -308,6 +308,60 @@ def test_internet_invalid_utf8_saves_nothing(monkeypatch, tmp_path):
 
     assert suggestions == []
     assert error == "Internet response could not be read safely. No words were saved."
+    assert pending_file.read_text() == ""
+
+
+def test_internet_review_back_returns_to_topic_search_and_preserves_topic(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("")
+    pending_file.write_text("")
+    dashboard = make_renderable_headless_app(monkeypatch)
+    payload = coach.json.dumps([
+        {"word": "firewall", "defs": ["n\tA security barrier for network traffic."]},
+    ]).encode("utf-8")
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+    monkeypatch.setattr(coach.urllib.request, "urlopen", lambda url, timeout: FakeResponse(payload))
+
+    dashboard.show_internet_words(push=True)
+    dashboard.topic_var.set("cybersecurity")
+    dashboard.fetch_internet_words_for_review()
+
+    assert dashboard.current_view == "internet_review"
+    assert dashboard.controller.current_screen == "internet_review"
+
+    dashboard.go_back()
+
+    assert dashboard.current_view == "internet_search"
+    assert dashboard.controller.current_screen == "internet_search"
+    assert dashboard.topic_var.get() == "cybersecurity"
+
+
+def test_internet_response_skips_invalid_items_and_keeps_valid_suggestion(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("")
+    pending_file.write_text("")
+    dashboard = make_headless_app()
+    payload = coach.json.dumps([
+        {"word": 123, "defs": ["n\tBad numeric word."]},
+        {"word": None, "defs": ["n\tBad none word."]},
+        {"word": ["list"], "defs": ["n\tBad list word."]},
+        {"word": "numberdefs", "defs": 123},
+        {"word": "nonedef", "defs": [None]},
+        {"word": "firewall", "defs": ["n\tA security barrier for network traffic."]},
+    ]).encode("utf-8")
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+    monkeypatch.setattr(coach.urllib.request, "urlopen", lambda url, timeout: FakeResponse(payload))
+
+    suggestions, error = dashboard.fetch_internet_suggestions("cybersecurity")
+
+    assert error == ""
+    assert suggestions == [("firewall", "A security barrier for network traffic.")]
     assert pending_file.read_text() == ""
 
 
@@ -626,4 +680,36 @@ def test_approve_selected_pending_words_preserves_unrelated_pending_lines_exactl
         "legacy pending line without separator\n"
         "malformed|record|with|extra pipes\n"
         "malware|Harmful software.\n"
+    )
+
+
+def test_approve_selected_pending_words_preserves_crlf_unrelated_lines(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    meanings_file = tmp_path / "meanings.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("router\n")
+    meanings_file.write_text("router|A network device.\n")
+    pending_file.write_bytes(
+        b"firewall|A security barrier.\r\n"
+        b"\r\n"
+        b"legacy pending line without separator\r\n"
+        b"malformed|record|with|extra pipes\r\n"
+        b"malware|Harmful software.\r\n"
+    )
+    dashboard = make_headless_app()
+    dashboard.pending_selection_vars = [
+        (FakeVar(True), "firewall", "A security barrier.", "firewall|A security barrier.\r\n"),
+    ]
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "MEANINGS_FILE", str(meanings_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+
+    dashboard.approve_selected_pending_words()
+
+    assert pending_file.read_bytes() == (
+        b"\r\n"
+        b"legacy pending line without separator\r\n"
+        b"malformed|record|with|extra pipes\r\n"
+        b"malware|Harmful software.\r\n"
     )
