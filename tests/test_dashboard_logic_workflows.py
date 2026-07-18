@@ -228,3 +228,70 @@ def test_dashboard_app_does_not_hardcode_random_all_one_or_level_easy_start():
 
 def test_exit_dashboard_routes_to_root_destroy():
     assert 'destroy' in app.DashboardApp.open_activity.__code__.co_names
+
+
+def test_dashboard_app_back_restores_supported_previous_screens():
+    class FakeController:
+        current_feedback = object()
+
+        def __init__(self, previous):
+            self.previous = previous
+
+        def back(self):
+            return self.previous
+
+    supported_screens = {
+        'home': 'show_home',
+        'random_menu': 'show_random_menu',
+        'random_amount': 'show_random_amount',
+        'spelling_count': 'show_spelling_count',
+        'level_menu': 'show_level_menu',
+        'add_word': 'show_add_word',
+        'pronounce_word': 'show_pronounce',
+        'internet_words': 'show_internet_words',
+        'pending_words': 'show_pending_words',
+        'approve_pending_words': 'show_approve_pending_words',
+        'activity_prompt': 'show_activity_prompt',
+        'feedback': 'show_feedback',
+        'lines': 'show_lines',
+    }
+
+    for screen, expected_handler in supported_screens.items():
+        dashboard = app.DashboardApp.__new__(app.DashboardApp)
+        dashboard.controller = FakeController(screen)
+        dashboard.current_prompt = object()
+        dashboard.last_lines_title = 'Saved Screen'
+        dashboard.last_lines = ['saved line']
+        calls = []
+
+        def record(name):
+            def handler(*args, **kwargs):
+                calls.append((name, args, kwargs))
+            return handler
+
+        for handler_name in set(supported_screens.values()) | {'show_home'}:
+            setattr(dashboard, handler_name, record(handler_name))
+
+        dashboard.go_back()
+
+        assert calls[0][0] == expected_handler
+        if expected_handler not in {'show_home'}:
+            assert calls[0][2].get('push') is False
+
+
+def test_dashboard_app_back_falls_home_for_unsupported_previous_screen():
+    class FakeController:
+        current_feedback = None
+
+        def back(self):
+            return 'unknown_screen'
+
+    dashboard = app.DashboardApp.__new__(app.DashboardApp)
+    dashboard.controller = FakeController()
+    dashboard.current_prompt = None
+    calls = []
+    dashboard.show_home = lambda: calls.append('home')
+
+    dashboard.go_back()
+
+    assert calls == ['home']

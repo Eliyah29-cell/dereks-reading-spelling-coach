@@ -240,11 +240,37 @@ class DashboardApp:
 
     def go_back(self):
         previous = self.controller.back()
-        if previous == "random_menu": self.show_random_menu(push=False)
-        elif previous == "random_amount": self.show_random_amount(push=False)
-        elif previous == "spelling_count": self.show_spelling_count(push=False)
-        elif previous == "level_menu": self.show_level_menu(push=False)
-        else: self.show_home()
+        self.restore_previous_screen(previous)
+
+    def restore_previous_screen(self, screen_name):
+        if screen_name == "home":
+            self.show_home()
+        elif screen_name == "random_menu":
+            self.show_random_menu(push=False)
+        elif screen_name == "random_amount":
+            self.show_random_amount(push=False)
+        elif screen_name == "spelling_count":
+            self.show_spelling_count(push=False)
+        elif screen_name == "level_menu":
+            self.show_level_menu(push=False)
+        elif screen_name == "add_word":
+            self.show_add_word(push=False)
+        elif screen_name == "pronounce_word":
+            self.show_pronounce(push=False)
+        elif screen_name == "internet_words":
+            self.show_internet_words(push=False)
+        elif screen_name == "pending_words":
+            self.show_pending_words(push=False)
+        elif screen_name == "approve_pending_words":
+            self.show_approve_pending_words(push=False)
+        elif screen_name == "activity_prompt" and self.current_prompt:
+            self.show_activity_prompt(self.current_prompt, push=False, add_to_history=False)
+        elif screen_name == "feedback" and self.controller.current_feedback:
+            self.show_feedback(self.controller.current_feedback, push=False, add_to_history=False)
+        elif screen_name == "lines":
+            self.show_lines(self.last_lines_title, self.last_lines, push=False)
+        else:
+            self.show_home()
 
     def open_activity(self, activity, push=True):
         if activity == "practice_all_words": self.start_practice_all_words(push=push)
