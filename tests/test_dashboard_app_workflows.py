@@ -192,6 +192,35 @@ class FakeResponse:
         return self.payload
 
 
+class FakeWidget:
+    def pack(self, *args, **kwargs):
+        return None
+
+    def bind(self, *args, **kwargs):
+        return None
+
+    def focus_set(self):
+        return None
+
+
+def make_renderable_headless_app(monkeypatch):
+    dashboard = make_headless_app()
+    dashboard.clear = lambda: None
+    dashboard.heading = lambda parent, text: None
+    dashboard.body_text = lambda parent, text: None
+    dashboard.make_button = lambda parent, text, command, enabled=True: None
+    dashboard.update_jump_control_visibility = lambda: None
+    dashboard.render_activity_history = lambda: None
+    dashboard.scroll_to_active_if_requested = lambda: None
+    dashboard.canvas = type("FakeCanvas", (), {"yview_moveto": lambda self, fraction: None})()
+    dashboard.show_activity_prompt = app_module.DashboardApp.show_activity_prompt.__get__(dashboard, app_module.DashboardApp)
+    dashboard.show_feedback = app_module.DashboardApp.show_feedback.__get__(dashboard, app_module.DashboardApp)
+    monkeypatch.setattr(app_module.tk, "Entry", lambda *args, **kwargs: FakeWidget())
+    monkeypatch.setattr(app_module.tk, "Checkbutton", lambda *args, **kwargs: FakeWidget())
+    monkeypatch.setattr(app_module.tk, "BooleanVar", lambda value=False: FakeVar(value))
+    return dashboard
+
+
 def test_internet_search_reviews_and_saves_only_selected_suggestions(monkeypatch, tmp_path):
     words_file = tmp_path / "words.txt"
     meanings_file = tmp_path / "meanings.txt"
@@ -243,6 +272,42 @@ def test_internet_connection_failure_saves_nothing(monkeypatch, tmp_path):
 
     assert suggestions == []
     assert error == "Internet connection failed safely. No words were saved."
+    assert pending_file.read_text() == ""
+
+
+def test_internet_malformed_json_saves_nothing(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("")
+    pending_file.write_text("")
+    dashboard = make_headless_app()
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+    monkeypatch.setattr(coach.urllib.request, "urlopen", lambda url, timeout: FakeResponse(b"{not json"))
+
+    suggestions, error = dashboard.fetch_internet_suggestions("network")
+
+    assert suggestions == []
+    assert error == "Internet response could not be read safely. No words were saved."
+    assert pending_file.read_text() == ""
+
+
+def test_internet_invalid_utf8_saves_nothing(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("")
+    pending_file.write_text("")
+    dashboard = make_headless_app()
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+    monkeypatch.setattr(coach.urllib.request, "urlopen", lambda url, timeout: FakeResponse(b"\xff\xfe"))
+
+    suggestions, error = dashboard.fetch_internet_suggestions("network")
+
+    assert suggestions == []
+    assert error == "Internet response could not be read safely. No words were saved."
     assert pending_file.read_text() == ""
 
 
@@ -363,3 +428,202 @@ def test_approve_pending_words_preserves_legacy_meaning_lines(monkeypatch, tmp_p
     dashboard.approve_selected_pending_words()
 
     assert meanings_file.read_text() == legacy_text + "firewall|A security barrier.\n"
+
+
+def assert_back_sequence_preserves_feedback_and_current_word(dashboard, first_answer):
+    dashboard.show_activity_prompt(dashboard.current_prompt, push=True, add_to_history=True)
+    dashboard.answer_var.set(first_answer)
+    dashboard.submit_answer()
+
+    assert dashboard.current_view == "feedback"
+    assert dashboard.controller.current_screen == "feedback"
+
+    dashboard.go_back()
+
+    assert dashboard.current_view == "feedback"
+    assert dashboard.controller.current_screen == "feedback"
+
+    dashboard.next_question()
+
+    assert dashboard.current_view == "activity_prompt"
+    assert dashboard.controller.current_screen == "activity_prompt"
+    assert dashboard.current_prompt.expected_word == "firewall"
+
+    dashboard.go_back()
+
+    assert dashboard.current_view == "feedback"
+    assert dashboard.controller.current_screen == "feedback"
+
+    dashboard.next_question()
+
+    assert dashboard.current_view == "activity_prompt"
+    assert dashboard.controller.current_screen == "activity_prompt"
+    assert dashboard.current_prompt.expected_word == "firewall"
+    assert dashboard.active_session.current_word == "firewall"
+
+
+def test_random_practice_back_after_answer_does_not_restore_editable_old_prompt(monkeypatch):
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.active_session = logic.RandomPracticeSession(
+        ["router", "firewall"],
+        {"router": "A network device.", "firewall": "A security barrier."},
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    dashboard.current_prompt = dashboard.active_session.start()
+
+    assert_back_sequence_preserves_feedback_and_current_word(dashboard, "router")
+
+
+def test_spelling_test_back_after_answer_does_not_restore_editable_old_prompt(monkeypatch):
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.active_session = logic.SpellingTestSession(
+        ["router", "firewall"],
+        save_missed_word=lambda word: None,
+        save_score=lambda score, total, activity: None,
+        pronounce_word=lambda word: None,
+    )
+    dashboard.current_prompt = dashboard.active_session.start()
+
+    assert_back_sequence_preserves_feedback_and_current_word(dashboard, "router")
+
+
+def test_spacing_preserves_internet_search_topic(monkeypatch):
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.current_view = "internet_search"
+    dashboard.controller.replace_screen("internet_search")
+    dashboard.topic_var.set("cybersecurity")
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "internet_search"
+    assert dashboard.controller.current_screen == "internet_search"
+    assert dashboard.topic_var.get() == "cybersecurity"
+
+
+def test_spacing_preserves_internet_review_suggestions_and_selection(monkeypatch):
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.current_view = "internet_review"
+    dashboard.controller.replace_screen("internet_review")
+    dashboard.internet_suggestions = [("firewall", "A barrier."), ("malware", "Harmful software.")]
+    dashboard.internet_selection_vars = [(FakeVar(True), "firewall", "A barrier."), (FakeVar(False), "malware", "Harmful software.")]
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "internet_review"
+    assert dashboard.controller.current_screen == "internet_review"
+    assert [(var.get(), word, meaning) for var, word, meaning in dashboard.internet_selection_vars] == [
+        (True, "firewall", "A barrier."),
+        (False, "malware", "Harmful software."),
+    ]
+
+
+def test_spacing_preserves_pending_selection(monkeypatch, tmp_path):
+    pending_file = tmp_path / "pending_words.txt"
+    pending_file.write_text("firewall|A barrier.\nmalware|Harmful software.\n")
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.current_view = "approve_pending_words"
+    dashboard.controller.replace_screen("approve_pending_words")
+    dashboard.pending_selection_vars = [
+        (FakeVar(False), "firewall", "A barrier.", "firewall|A barrier.\n"),
+        (FakeVar(True), "malware", "Harmful software.", "malware|Harmful software.\n"),
+    ]
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "approve_pending_words"
+    assert dashboard.controller.current_screen == "approve_pending_words"
+    assert [(var.get(), word) for var, word, meaning, raw_line in dashboard.pending_selection_vars] == [
+        (False, "firewall"),
+        (True, "malware"),
+    ]
+
+
+def test_spacing_preserves_pending_words_screen(monkeypatch, tmp_path):
+    pending_file = tmp_path / "pending_words.txt"
+    pending_file.write_text("firewall|A barrier.\n")
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.current_view = "pending_words"
+    dashboard.controller.replace_screen("pending_words")
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "pending_words"
+    assert dashboard.controller.current_screen == "pending_words"
+
+
+def test_spacing_preserves_progress_report_screen(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    meanings_file = tmp_path / "meanings.txt"
+    missed_file = tmp_path / "missed_words.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    score_file = tmp_path / "score_history.txt"
+    words_file.write_text("router\n")
+    meanings_file.write_text("router|A network device.\n")
+    missed_file.write_text("")
+    pending_file.write_text("")
+    score_file.write_text("")
+    dashboard = make_renderable_headless_app(monkeypatch)
+    dashboard.current_view = "progress_report"
+    dashboard.controller.replace_screen("progress_report")
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "MEANINGS_FILE", str(meanings_file))
+    monkeypatch.setattr(coach, "MISSED_WORDS_FILE", str(missed_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+    monkeypatch.setattr(coach, "SCORE_HISTORY_FILE", str(score_file))
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "progress_report"
+    assert dashboard.controller.current_screen == "progress_report"
+
+
+def test_spacing_preserves_feedback_screen(monkeypatch):
+    dashboard = make_renderable_headless_app(monkeypatch)
+    feedback = logic.ActivityFeedback(False, "Not quite. Review the correct spelling below.", revealed_word="router", question_number=1, total_questions=1)
+    dashboard.current_view = "feedback"
+    dashboard.controller.current_feedback = feedback
+    dashboard.active_session = logic.SpellingTestSession(["router"], lambda word: None, lambda score, total, activity: None, lambda word: None)
+    dashboard.controller.replace_screen("feedback")
+
+    app_module.DashboardApp.increase_spacing(dashboard)
+
+    assert dashboard.current_view == "feedback"
+    assert dashboard.controller.current_screen == "feedback"
+    assert dashboard.controller.current_feedback is feedback
+
+
+def test_approve_selected_pending_words_preserves_unrelated_pending_lines_exactly(monkeypatch, tmp_path):
+    words_file = tmp_path / "words.txt"
+    meanings_file = tmp_path / "meanings.txt"
+    pending_file = tmp_path / "pending_words.txt"
+    words_file.write_text("router\n")
+    meanings_file.write_text("router|A network device.\n")
+    pending_text = (
+        "firewall|A security barrier.\n"
+        "\n"
+        "legacy pending line without separator\n"
+        "malformed|record|with|extra pipes\n"
+        "malware|Harmful software.\n"
+    )
+    pending_file.write_text(pending_text)
+    dashboard = make_headless_app()
+    dashboard.pending_selection_vars = [
+        (FakeVar(True), "firewall", "A security barrier.", "firewall|A security barrier.\n"),
+    ]
+
+    monkeypatch.setattr(coach, "WORDS_FILE", str(words_file))
+    monkeypatch.setattr(coach, "MEANINGS_FILE", str(meanings_file))
+    monkeypatch.setattr(coach, "PENDING_WORDS_FILE", str(pending_file))
+
+    dashboard.approve_selected_pending_words()
+
+    assert pending_file.read_text() == (
+        "\n"
+        "legacy pending line without separator\n"
+        "malformed|record|with|extra pipes\n"
+        "malware|Harmful software.\n"
+    )
