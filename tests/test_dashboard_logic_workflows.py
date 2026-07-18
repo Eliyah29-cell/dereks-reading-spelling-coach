@@ -430,3 +430,42 @@ def test_next_question_push_false_syncs_controller_and_back_keeps_current_spelli
     assert dashboard.controller.current_feedback.revealed_word == 'beta'
     assert missed == ['alpha', 'beta']
     assert saved == [(0, 2, 'Spelling Test')]
+
+
+def test_random_repeat_word_uses_answered_word_during_feedback_then_next_prompt_word():
+    spoken = []
+    session = logic.RandomPracticeSession(
+        ['alpha', 'beta'],
+        {},
+        lambda word: None,
+        lambda score, total, activity: None,
+        spoken.append,
+    )
+
+    session.start()
+    session.repeat_word()
+    session.submit_answer('wrong')
+    session.repeat_word()
+    session.start()
+    session.repeat_word()
+
+    assert spoken == ['alpha', 'alpha', 'alpha', 'beta', 'beta']
+
+
+def test_spelling_repeat_word_uses_answered_word_during_feedback_then_next_prompt_word():
+    spoken = []
+    session = logic.SpellingTestSession(
+        ['alpha', 'beta'],
+        lambda word: None,
+        lambda score, total, activity: None,
+        spoken.append,
+    )
+
+    session.start()
+    session.repeat_word()
+    session.submit_answer('wrong')
+    session.repeat_word()
+    session.start()
+    session.repeat_word()
+
+    assert spoken == ['alpha', 'alpha', 'alpha', 'beta', 'beta']

@@ -341,6 +341,7 @@ class MultiWordActivity:
         self.finished = False
         self.score_saved = False
         self.last_word: str | None = None
+        self.waiting_for_feedback_action = False
 
     @property
     def total_questions(self):
@@ -357,7 +358,10 @@ class MultiWordActivity:
         return self.words[self.index]
 
     def repeat_word(self):
-        word = self.current_word or self.last_word
+        if self.waiting_for_feedback_action:
+            word = self.last_word
+        else:
+            word = self.current_word
         if word:
             self.pronounce_word(word)
 
@@ -366,6 +370,7 @@ class MultiWordActivity:
         if word is None:
             return ActivityFeedback(False, "This activity is finished.", finished=True)
         self.last_word = word
+        self.waiting_for_feedback_action = True
         current_number = self.question_number
         correct = answer.strip().lower() == word.lower()
         self.answered_count += 1
@@ -398,6 +403,7 @@ class RandomPracticeSession(MultiWordActivity):
         if not word:
             self.finished = True
             return ActivityPrompt(None, "", True, "No words are available.", 0, 0)
+        self.waiting_for_feedback_action = False
         self.pronounce_word(word)
         return ActivityPrompt(word, self.meanings.get(word, NO_MEANING), True, "Read the word and meaning, then type the word.", self.question_number, self.total_questions)
 
@@ -410,6 +416,7 @@ class SpellingTestSession(MultiWordActivity):
         if not word:
             self.finished = True
             return ActivityPrompt(None, "", False, "No words are available.", 0, 0)
+        self.waiting_for_feedback_action = False
         self.pronounce_word(word)
         return ActivityPrompt(None, "", False, "Listen to the word, then spell it from memory.", self.question_number, self.total_questions)
 
