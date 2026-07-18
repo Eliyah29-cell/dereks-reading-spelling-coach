@@ -291,9 +291,12 @@ class DashboardApp:
         elif activity == "progress_report": self.show_lines("Progress Report", build_progress_report(), push=push)
         elif activity == "exit": self.root.destroy()
 
-    def show_lines(self, title, lines, push=True):
-        if push: self.controller.push_screen("lines")
-        self.current_view = "lines"; self.last_lines_title = title; self.last_lines = list(lines)
+    def show_lines(self, title, lines, push=True, screen_name="lines"):
+        if push:
+            self.controller.push_screen(screen_name)
+        else:
+            self.controller.replace_screen(screen_name)
+        self.current_view = screen_name; self.last_lines_title = title; self.last_lines = list(lines)
         self.clear(); self.heading(self.main, title)
         for line in lines: self.body_text(self.main, str(line))
         self.make_button(self.main, "Return Home", self.show_home)
@@ -321,6 +324,7 @@ class DashboardApp:
 
     def show_level_menu(self, push=True):
         if push: self.controller.push_screen("level_menu")
+        else: self.controller.replace_screen("level_menu")
         self.current_view = "level_menu"; self.clear(); self.heading(self.main, "Practice by Level")
         for level, words in coach.LEVELS.items():
             self.make_button(self.main, level.title(), lambda level=level, words=words: self.start_level_practice(level, words))
@@ -331,6 +335,7 @@ class DashboardApp:
 
     def show_random_menu(self, push=True):
         if push: self.controller.push_screen("random_menu")
+        else: self.controller.replace_screen("random_menu")
         self.current_view = "random_menu"; self.clear(); self.heading(self.main, "Random Practice")
         options = [("All words", coach.load_words()), ("Easy", coach.LEVELS["easy"]), ("Medium", coach.LEVELS["medium"]), ("Hard", coach.LEVELS["hard"]), ("Cybersecurity", coach.LEVELS["cybersecurity"])]
         for label, words in options: self.make_button(self.main, label, lambda words=words: self.choose_random_group(words))
@@ -341,6 +346,7 @@ class DashboardApp:
 
     def show_random_amount(self, push=True):
         if push: self.controller.push_screen("random_amount")
+        else: self.controller.replace_screen("random_amount")
         self.current_view = "random_amount"; self.clear(); self.heading(self.main, "How many random words?")
         self.body_text(self.main, f"Choose 1 through {min(5, len(self.random_group_words))}.")
         entry = tk.Entry(self.main, textvariable=self.amount_var, font=("Arial", self.font_size.get()))
@@ -356,6 +362,7 @@ class DashboardApp:
 
     def show_spelling_count(self, push=True):
         if push: self.controller.push_screen("spelling_count")
+        else: self.controller.replace_screen("spelling_count")
         self.current_view = "spelling_count"; self.clear(); self.heading(self.main, "Spelling Test")
         self.body_text(self.main, f"Choose 1 through {len(coach.load_words())}, or type all for All Words.")
         entry = tk.Entry(self.main, textvariable=self.spelling_count_var, font=("Arial", self.font_size.get()))
@@ -375,6 +382,7 @@ class DashboardApp:
 
     def show_activity_prompt(self, prompt, push=True, add_to_history=False):
         if push: self.controller.push_screen("activity_prompt")
+        else: self.controller.replace_screen("activity_prompt")
         self.current_view = "activity_prompt"; self.current_prompt = prompt; self.controller.current_feedback = None
         if add_to_history: self.controller.add_prompt_to_history(self.active_session.activity_label, prompt)
         self.clear(); self.auto_scroll.add_active_output(); self.heading(self.main, self.active_session.activity_label); self.update_jump_control_visibility(); self.render_activity_history()
@@ -391,6 +399,7 @@ class DashboardApp:
 
     def show_feedback(self, feedback, push=True, submitted_answer="", add_to_history=False):
         if push: self.controller.push_screen("feedback")
+        else: self.controller.replace_screen("feedback")
         self.current_view = "feedback"
         if add_to_history: self.controller.add_feedback_to_history(self.active_session.activity_label, feedback, submitted_answer)
         else: self.controller.current_feedback = feedback
@@ -415,6 +424,7 @@ class DashboardApp:
 
     def show_add_word(self, push=True):
         if push: self.controller.push_screen("add_word")
+        else: self.controller.replace_screen("add_word")
         self.current_view = "add_word"; self.clear(); self.heading(self.main, "Add New Word")
         entry = tk.Entry(self.main, textvariable=self.new_word_var, font=("Arial", self.font_size.get()))
         entry.pack(fill="x", padx=14, pady=14, ipady=8); entry.focus_set(); entry.bind("<Return>", lambda event: self.save_new_word())
@@ -425,6 +435,7 @@ class DashboardApp:
 
     def show_pronounce(self, push=True):
         if push: self.controller.push_screen("pronounce_word")
+        else: self.controller.replace_screen("pronounce_word")
         self.current_view = "pronounce_word"; self.clear(); self.heading(self.main, "Pronounce a Word")
         entry = tk.Entry(self.main, textvariable=self.pronounce_var, font=("Arial", self.font_size.get()))
         entry.pack(fill="x", padx=14, pady=14, ipady=8); entry.focus_set(); entry.bind("<Return>", lambda event: self.pronounce_entered_word())
@@ -437,6 +448,7 @@ class DashboardApp:
 
     def show_internet_words(self, push=True):
         if push: self.controller.push_screen("internet_words")
+        else: self.controller.replace_screen("internet_words")
         self.current_view = "internet_words"; self.clear(); self.heading(self.main, "Internet Words")
         self.body_text(self.main, "Enter a topic. Review suggestions before saving any pending words.")
         tk.Entry(self.main, textvariable=self.internet_topic_var, font=("Arial", self.font_size.get())).pack(fill="x", padx=14, pady=14, ipady=8)
@@ -461,11 +473,11 @@ class DashboardApp:
     def show_pending_words(self, push=True):
         records = load_pending_word_records()
         lines = [f"{word}: {meaning}" for word, meaning in records] or ["No pending words yet."]
-        self.show_lines("Pending Internet Words", lines, push=push)
-        self.current_view = "pending_words"
+        self.show_lines("Pending Internet Words", lines, push=push, screen_name="pending_words")
 
     def show_approve_pending_words(self, push=True):
         if push: self.controller.push_screen("approve_pending_words")
+        else: self.controller.replace_screen("approve_pending_words")
         self.current_view = "approve_pending_words"; self.clear(); self.heading(self.main, "Approve Internet Words")
         records = load_pending_word_records(); self.pending_choice_vars = []
         if not records: self.body_text(self.main, "No pending words yet.")

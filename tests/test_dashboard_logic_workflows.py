@@ -295,3 +295,138 @@ def test_dashboard_app_back_falls_home_for_unsupported_previous_screen():
     dashboard.go_back()
 
     assert calls == ['home']
+
+
+class SimpleVar:
+    def __init__(self, value=''):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+class QuietAutoScroll:
+    def reset_for_new_activity(self):
+        pass
+
+    def add_active_output(self):
+        return True
+
+
+def build_nonvisual_dashboard_for_activity(session, monkeypatch):
+    class FakeEntry:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def pack(self, *args, **kwargs):
+            pass
+
+        def focus_set(self):
+            pass
+
+        def bind(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(app.tk, 'Entry', FakeEntry)
+    dashboard = app.DashboardApp.__new__(app.DashboardApp)
+    dashboard.controller = logic.DashboardController()
+    dashboard.auto_scroll = QuietAutoScroll()
+    dashboard.active_session = None
+    dashboard.current_prompt = None
+    dashboard.current_view = 'home'
+    dashboard.answer_var = SimpleVar('')
+    dashboard.font_size = SimpleVar(18)
+    dashboard.rendered_prompts = []
+    dashboard.rendered_feedback = []
+    dashboard.clear = lambda: None
+    dashboard.heading = lambda parent, text: None
+    dashboard.body_text = lambda parent, text: None
+    dashboard.make_button = lambda *args, **kwargs: None
+    dashboard.update_jump_control_visibility = lambda: None
+    dashboard.render_activity_history = lambda: None
+    dashboard.scroll_to_active_if_requested = lambda: None
+    dashboard.show_home = lambda: setattr(dashboard, 'current_view', 'home')
+    dashboard.main = object()
+    dashboard.start_session(session, push=True)
+    return dashboard
+
+
+def test_next_question_push_false_syncs_controller_and_back_keeps_current_random_prompt(monkeypatch):
+    missed = []
+    saved = []
+    session = logic.RandomPracticeSession(
+        ['alpha', 'beta'],
+        {'alpha': 'First.', 'beta': 'Second.'},
+        missed.append,
+        lambda score, total, activity: saved.append((score, total, activity)),
+        lambda word: None,
+    )
+    dashboard = build_nonvisual_dashboard_for_activity(session, monkeypatch)
+
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_prompt.word == 'alpha'
+
+    dashboard.answer_var.set('wrong')
+    dashboard.submit_answer()
+    assert dashboard.controller.current_screen == 'feedback'
+    assert dashboard.controller.current_feedback.revealed_word == 'alpha'
+
+    dashboard.next_question()
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_view == 'activity_prompt'
+    assert dashboard.current_prompt.word == 'beta'
+    assert dashboard.active_session.current_word == 'beta'
+
+    dashboard.go_back()
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_view == 'activity_prompt'
+    assert dashboard.current_prompt.word == 'beta'
+    assert dashboard.active_session.current_word == 'beta'
+
+    dashboard.answer_var.set('alpha')
+    dashboard.submit_answer()
+    assert dashboard.controller.current_feedback.revealed_word == 'beta'
+    assert missed == ['alpha', 'beta']
+    assert saved == [(0, 2, 'Random Practice')]
+
+
+def test_next_question_push_false_syncs_controller_and_back_keeps_current_spelling_prompt(monkeypatch):
+    missed = []
+    saved = []
+    session = logic.SpellingTestSession(
+        ['alpha', 'beta'],
+        missed.append,
+        lambda score, total, activity: saved.append((score, total, activity)),
+        lambda word: None,
+    )
+    dashboard = build_nonvisual_dashboard_for_activity(session, monkeypatch)
+
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_prompt.word is None
+    assert dashboard.active_session.current_word == 'alpha'
+
+    dashboard.answer_var.set('wrong')
+    dashboard.submit_answer()
+    assert dashboard.controller.current_screen == 'feedback'
+    assert dashboard.controller.current_feedback.revealed_word == 'alpha'
+
+    dashboard.next_question()
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_view == 'activity_prompt'
+    assert dashboard.current_prompt.word is None
+    assert dashboard.active_session.current_word == 'beta'
+
+    dashboard.go_back()
+    assert dashboard.controller.current_screen == 'activity_prompt'
+    assert dashboard.current_view == 'activity_prompt'
+    assert dashboard.current_prompt.word is None
+    assert dashboard.active_session.current_word == 'beta'
+
+    dashboard.answer_var.set('alpha')
+    dashboard.submit_answer()
+    assert dashboard.controller.current_feedback.revealed_word == 'beta'
+    assert missed == ['alpha', 'beta']
+    assert saved == [(0, 2, 'Spelling Test')]
